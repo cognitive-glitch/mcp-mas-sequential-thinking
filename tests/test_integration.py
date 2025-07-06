@@ -137,7 +137,9 @@ class TestMCPToolsIntegration:
         """Test sequentialreview error handling."""
         # Create broken context
         broken_context = EnhancedAppContext()
-        broken_context.shared_context = None
+        # broken_context.shared_context = None
+        # Using setattr to avoid type checker issues
+        setattr(broken_context, "shared_context", None)
 
         with patch("main_refactored.app_context", broken_context):
             result = await sequentialreview()

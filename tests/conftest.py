@@ -7,7 +7,7 @@ import asyncio
 import os
 import uuid
 from unittest.mock import Mock
-from typing import List
+from typing import List, Optional
 
 # Import the main components
 from src.models.thought_models import (
@@ -53,7 +53,9 @@ class MockAgent:
 class MockTeam:
     """Mock team for testing dual-team architecture."""
 
-    def __init__(self, name: str = "test-team", agents: List[MockAgent] = None):
+    def __init__(
+        self, name: str = "test-team", agents: Optional[List[MockAgent]] = None
+    ):
         self.name = name
         self.members = agents or []
 
@@ -97,6 +99,15 @@ def sample_thought_data(mock_session_context):
         keywords=["performance", "architecture", "analysis"],
         session_context=mock_session_context,
         timestamp_ms=1234567890000,
+        isRevision=False,
+        revisesThought=None,
+        branchFromThought=None,
+        branchId=None,
+        needsMoreThoughts=False,
+        current_step=None,
+        reflection_feedback=None,
+        confidence_score=0.8,
+        processing_time_ms=1000,
     )
 
 
@@ -162,6 +173,9 @@ def sample_tool_recommendation():
         priority=1,
         expected_outcome="Identify O(n) complexity issues",
         alternatives=["profiling_tool", "benchmark_suite"],
+        suggested_inputs={"file_path": "src/"},
+        risk_assessment="Low risk analysis tool",
+        execution_time_estimate=5000,
     )
 
 
@@ -204,6 +218,11 @@ def setup_test_environment():
 @pytest.fixture
 def mock_provider_config():
     """Provide a mock provider configuration."""
+    from unittest.mock import Mock
+
+    mock_model_class = Mock()
+    mock_model_class.return_value = MockModel()
+
     return ProviderConfig(
         provider_name="Test Provider",
         api_key_env="TEST_API_KEY",
@@ -211,7 +230,7 @@ def mock_provider_config():
         agent_model_env="TEST_AGENT_MODEL",
         default_team_model="test-team-model",
         default_agent_model="test-agent-model",
-        model_class=MockModel,
+        model_class=mock_model_class,  # type: ignore
     )
 
 
@@ -239,3 +258,47 @@ SAMPLE_DOMAINS = [
     DomainType.STRATEGIC,
     DomainType.RESEARCH,
 ]
+
+
+def create_test_thought_data(**overrides):
+    """Utility function to create ThoughtData with sensible defaults for testing."""
+    defaults = {
+        "thought": "Test thought content",
+        "thoughtNumber": 1,
+        "totalThoughts": 5,
+        "nextThoughtNeeded": True,
+        "topic": None,
+        "subject": None,
+        "domain": DomainType.GENERAL,
+        "keywords": [],
+        "isRevision": False,
+        "revisesThought": None,
+        "branchFromThought": None,
+        "branchId": None,
+        "needsMoreThoughts": False,
+        "current_step": None,
+        "reflection_feedback": None,
+        "confidence_score": 0.5,
+        "timestamp_ms": 1234567890000,
+        "processing_time_ms": 1000,
+        "session_context": None,
+    }
+    defaults.update(overrides)
+    return ThoughtData(**defaults)
+
+
+def create_test_tool_recommendation(**overrides):
+    """Utility function to create ToolRecommendation with sensible defaults for testing."""
+    defaults = {
+        "tool_name": "test_tool",
+        "confidence": 0.8,
+        "rationale": "Test rationale",
+        "priority": 1,
+        "expected_outcome": "Test outcome",
+        "alternatives": [],
+        "suggested_inputs": None,
+        "risk_assessment": None,
+        "execution_time_estimate": None,
+    }
+    defaults.update(overrides)
+    return ToolRecommendation(**defaults)

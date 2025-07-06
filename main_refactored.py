@@ -974,7 +974,7 @@ async def lifespan(app):
 def run():
     """Run the enhanced MCP server."""
     logger.info("Enhanced Reflective Sequential Thinking MCP Server starting...")
-    mcp.run()
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

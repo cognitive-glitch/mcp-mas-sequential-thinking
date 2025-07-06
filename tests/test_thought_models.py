@@ -6,8 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from src.models.thought_models import (
-    ThoughtData,
-    ToolRecommendation,
     StepRecommendation,
     SessionContext,
     DomainType,
@@ -15,6 +13,7 @@ from src.models.thought_models import (
     ThoughtSequenceReview,
     ProcessedThought,
 )
+from conftest import create_test_thought_data, create_test_tool_recommendation
 
 
 class TestThoughtData:
@@ -22,7 +21,7 @@ class TestThoughtData:
 
     def test_basic_thought_creation(self, mock_session_context):
         """Test creating a basic thought with required fields."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Test thought content",
             thoughtNumber=1,
             totalThoughts=3,
@@ -39,7 +38,7 @@ class TestThoughtData:
 
     def test_enhanced_thought_with_topic_alignment(self, mock_session_context):
         """Test thought with topic/subject alignment features."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Analyze system performance",
             thoughtNumber=2,
             totalThoughts=5,
@@ -60,7 +59,7 @@ class TestThoughtData:
     def test_revision_validation(self, mock_session_context):
         """Test revision logic validation."""
         # Valid revision
-        revision_thought = ThoughtData(
+        revision_thought = create_test_thought_data(
             thought="Revised analysis",
             thoughtNumber=3,
             totalThoughts=5,
@@ -75,7 +74,7 @@ class TestThoughtData:
 
         # Invalid revision - revising future thought
         with pytest.raises(ValidationError):
-            ThoughtData(
+            create_test_thought_data(
                 thought="Invalid revision",
                 thoughtNumber=2,
                 totalThoughts=5,
@@ -88,7 +87,7 @@ class TestThoughtData:
     def test_branching_validation(self, mock_session_context):
         """Test branching logic validation."""
         # Valid branch
-        branch_thought = ThoughtData(
+        branch_thought = create_test_thought_data(
             thought="Branch analysis",
             thoughtNumber=4,
             totalThoughts=5,
@@ -103,7 +102,7 @@ class TestThoughtData:
 
         # Invalid branch - missing branch ID
         with pytest.raises(ValidationError):
-            ThoughtData(
+            create_test_thought_data(
                 thought="Invalid branch",
                 thoughtNumber=4,
                 totalThoughts=5,
@@ -115,7 +114,7 @@ class TestThoughtData:
 
     def test_keyword_validation(self, mock_session_context):
         """Test keyword validation and cleaning."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Test with keywords",
             thoughtNumber=1,
             totalThoughts=3,
@@ -141,7 +140,7 @@ class TestThoughtData:
 
     def test_topic_subject_validation(self, mock_session_context):
         """Test topic and subject validation."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Test topic validation",
             thoughtNumber=1,
             totalThoughts=3,
@@ -161,7 +160,7 @@ class TestThoughtData:
         sample_step_recommendation,
     ):
         """Test the enhanced log format with topic/subject and tools."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Complex thought with all features",
             thoughtNumber=2,
             totalThoughts=5,
@@ -187,7 +186,7 @@ class TestThoughtData:
 
     def test_tool_summary(self, mock_session_context, sample_step_recommendation):
         """Test tool summary generation."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Test with tools",
             thoughtNumber=1,
             totalThoughts=3,
@@ -207,7 +206,7 @@ class TestThoughtData:
 
     def test_alignment_summary(self, mock_session_context):
         """Test topic/subject alignment summary."""
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Test alignment",
             thoughtNumber=1,
             totalThoughts=3,
@@ -233,7 +232,7 @@ class TestToolRecommendation:
 
     def test_tool_recommendation_creation(self):
         """Test creating a tool recommendation."""
-        tool_rec = ToolRecommendation(
+        tool_rec = create_test_tool_recommendation(
             tool_name="performance_analyzer",
             confidence=0.85,
             rationale="System shows performance bottlenecks",
@@ -250,7 +249,7 @@ class TestToolRecommendation:
     def test_confidence_validation(self):
         """Test confidence score validation."""
         # Valid confidence
-        tool_rec = ToolRecommendation(
+        tool_rec = create_test_tool_recommendation(
             tool_name="test_tool",
             confidence=0.5,
             rationale="Test",
@@ -261,7 +260,7 @@ class TestToolRecommendation:
 
         # Invalid confidence - too high
         with pytest.raises(ValidationError):
-            ToolRecommendation(
+            create_test_tool_recommendation(
                 tool_name="test_tool",
                 confidence=1.5,  # > 1.0
                 rationale="Test",
@@ -271,7 +270,7 @@ class TestToolRecommendation:
 
         # Invalid confidence - negative
         with pytest.raises(ValidationError):
-            ToolRecommendation(
+            create_test_tool_recommendation(
                 tool_name="test_tool",
                 confidence=-0.1,  # < 0.0
                 rationale="Test",

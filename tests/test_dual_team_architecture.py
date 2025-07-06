@@ -11,7 +11,8 @@ from main_refactored import (
     process_thought_with_dual_teams,
     generate_sequence_review,
 )
-from src.models.thought_models import ThoughtData, ProcessedThought, DomainType
+from src.models.thought_models import ProcessedThought, DomainType
+from conftest import create_test_thought_data
 
 
 class TestEnhancedAppContext:
@@ -194,7 +195,7 @@ class TestDualTeamProcessing:
     @pytest.mark.asyncio
     async def test_revision_processing(self, mock_app_context, mock_session_context):
         """Test processing of revision thoughts."""
-        revision_thought = ThoughtData(
+        revision_thought = create_test_thought_data(
             thought="Revised analysis with better approach",
             thoughtNumber=3,
             totalThoughts=5,
@@ -218,7 +219,7 @@ class TestDualTeamProcessing:
     @pytest.mark.asyncio
     async def test_branching_processing(self, mock_app_context, mock_session_context):
         """Test processing of branching thoughts."""
-        branch_thought = ThoughtData(
+        branch_thought = create_test_thought_data(
             thought="Alternative approach via branch",
             thoughtNumber=4,
             totalThoughts=5,
@@ -272,7 +273,7 @@ class TestSequenceReview:
         # Add some mock thoughts to context first
         thoughts = []
         for i in range(1, 4):
-            thought = ThoughtData(
+            thought = create_test_thought_data(
                 thought=f"Test thought {i}",
                 thoughtNumber=i,
                 totalThoughts=3,
@@ -294,7 +295,9 @@ class TestSequenceReview:
         """Test review generation error handling."""
         # Create a context that will cause errors
         broken_context = EnhancedAppContext()
-        broken_context.shared_context = None  # This should cause an error
+        # broken_context.shared_context = None  # This should cause an error
+        # Using attribute access instead to avoid type checker issues
+        setattr(broken_context, "shared_context", None)
 
         with patch("main_refactored.app_context", broken_context):
             review = await generate_sequence_review()
@@ -347,7 +350,7 @@ class TestTeamCoordination:
             await mock_app_context.add_thought(sample_thought_data)
 
             # Process another thought
-            second_thought = ThoughtData(
+            second_thought = create_test_thought_data(
                 thought="Building on previous analysis",
                 thoughtNumber=2,
                 totalThoughts=3,
@@ -370,7 +373,7 @@ class TestTeamCoordination:
         with patch("main_refactored.app_context", mock_app_context):
             # Process a series of thoughts
             for i in range(1, 4):
-                thought = ThoughtData(
+                thought = create_test_thought_data(
                     thought=f"Progressive analysis step {i}",
                     thoughtNumber=i,
                     totalThoughts=3,

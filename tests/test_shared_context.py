@@ -7,7 +7,8 @@ import asyncio
 import networkx as nx
 
 from src.context.shared_context import SharedContext, Insight
-from src.models.thought_models import ThoughtData, ToolDecision
+from src.models.thought_models import ToolDecision
+from conftest import create_test_thought_data
 
 
 class TestSharedContext:
@@ -64,7 +65,7 @@ class TestSharedContext:
         context = SharedContext()
 
         # Create a sequence of related thoughts
-        thought1 = ThoughtData(
+        thought1 = create_test_thought_data(
             thought="First thought",
             thoughtNumber=1,
             totalThoughts=3,
@@ -72,7 +73,7 @@ class TestSharedContext:
             session_context=mock_session_context,
         )
 
-        thought2 = ThoughtData(
+        thought2 = create_test_thought_data(
             thought="Second thought building on first",
             thoughtNumber=2,
             totalThoughts=3,
@@ -80,7 +81,7 @@ class TestSharedContext:
             session_context=mock_session_context,
         )
 
-        thought3 = ThoughtData(
+        thought3 = create_test_thought_data(
             thought="Revised first thought",
             thoughtNumber=3,
             totalThoughts=3,
@@ -110,7 +111,7 @@ class TestSharedContext:
         context = SharedContext()
 
         # Create main sequence
-        main_thought = ThoughtData(
+        main_thought = create_test_thought_data(
             thought="Main analysis",
             thoughtNumber=1,
             totalThoughts=3,
@@ -119,7 +120,7 @@ class TestSharedContext:
         )
 
         # Create branch
-        branch_thought = ThoughtData(
+        branch_thought = create_test_thought_data(
             thought="Alternative approach",
             thoughtNumber=2,
             totalThoughts=3,
@@ -145,7 +146,7 @@ class TestSharedContext:
 
         # Add several thoughts with different topics
         thoughts = [
-            ThoughtData(
+            create_test_thought_data(
                 thought="Performance analysis of database queries",
                 thoughtNumber=1,
                 totalThoughts=5,
@@ -154,7 +155,7 @@ class TestSharedContext:
                 keywords=["database", "performance", "queries"],
                 session_context=mock_session_context,
             ),
-            ThoughtData(
+            create_test_thought_data(
                 thought="Security review of authentication system",
                 thoughtNumber=2,
                 totalThoughts=5,
@@ -163,7 +164,7 @@ class TestSharedContext:
                 keywords=["security", "authentication", "review"],
                 session_context=mock_session_context,
             ),
-            ThoughtData(
+            create_test_thought_data(
                 thought="Database optimization strategies",
                 thoughtNumber=3,
                 totalThoughts=5,
@@ -256,7 +257,7 @@ class TestSharedContext:
         # Create a chain of thoughts
         thoughts = []
         for i in range(1, 5):
-            thought = ThoughtData(
+            thought = create_test_thought_data(
                 thought=f"Thought {i}",
                 thoughtNumber=i,
                 totalThoughts=4,
@@ -281,7 +282,7 @@ class TestSharedContext:
         context = SharedContext()
 
         # Create thoughts that could form a cycle
-        thought1 = ThoughtData(
+        thought1 = create_test_thought_data(
             thought="Initial analysis",
             thoughtNumber=1,
             totalThoughts=3,
@@ -289,7 +290,7 @@ class TestSharedContext:
             session_context=mock_session_context,
         )
 
-        thought2 = ThoughtData(
+        thought2 = create_test_thought_data(
             thought="Refinement of analysis",
             thoughtNumber=2,
             totalThoughts=3,
@@ -297,7 +298,7 @@ class TestSharedContext:
             session_context=mock_session_context,
         )
 
-        thought3 = ThoughtData(
+        thought3 = create_test_thought_data(
             thought="Back to initial approach",
             thoughtNumber=3,
             totalThoughts=3,
@@ -356,9 +357,10 @@ class TestSharedContext:
             alternatives_considered=["profiler", "benchmark"],
             confidence=0.85,
             outcome="Identified 3 performance bottlenecks",
+            execution_time_ms=2500,
         )
 
-        thought = ThoughtData(
+        thought = create_test_thought_data(
             thought="Code analysis complete",
             thoughtNumber=1,
             totalThoughts=2,
@@ -383,7 +385,7 @@ class TestSharedContext:
         # Create multiple thoughts to add concurrently
         thoughts = []
         for i in range(1, 6):
-            thought = ThoughtData(
+            thought = create_test_thought_data(
                 thought=f"Concurrent thought {i}",
                 thoughtNumber=i,
                 totalThoughts=5,
@@ -409,11 +411,14 @@ class TestInsight:
 
     def test_insight_creation(self):
         """Test creating an insight."""
+        from datetime import datetime
+
         insight = Insight(
             content="Database optimization needed",
             source_thought=2,
             confidence=0.9,
             category="performance",
+            timestamp=datetime.now(),
         )
 
         assert insight.content == "Database optimization needed"
@@ -424,8 +429,14 @@ class TestInsight:
 
     def test_insight_serialization(self):
         """Test insight to_dict method."""
+        from datetime import datetime
+
         insight = Insight(
-            content="Test insight", source_thought=1, confidence=0.8, category="test"
+            content="Test insight",
+            source_thought=1,
+            confidence=0.8,
+            category="test",
+            timestamp=datetime.now(),
         )
 
         data = insight.to_dict()
