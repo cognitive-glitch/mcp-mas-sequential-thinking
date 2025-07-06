@@ -273,30 +273,24 @@ def get_model_config() -> tuple[Type[Model], str, str]:
         - team_model_id: The model ID for the team coordinator.
         - agent_model_id: The model ID for the specialist agents.
     """
-    provider = os.environ.get("LLM_PROVIDER", "deepseek").lower()
+    provider = os.environ.get("THINKING_LLM_PROVIDER", "openrouter").lower()
     logger.info(f"Selected LLM Provider: {provider}")
 
-    if provider == "deepseek":
-        ModelClass = DeepSeek
-        # Use environment variables for DeepSeek model IDs if set, otherwise use defaults
-        team_model_id = os.environ.get("DEEPSEEK_TEAM_MODEL_ID", "deepseek-chat")
-        agent_model_id = os.environ.get("DEEPSEEK_AGENT_MODEL_ID", "deepseek-chat")
-        logger.info(f"Using DeepSeek: Team Model='{team_model_id}', Agent Model='{agent_model_id}'")
-    elif provider == "groq":
+    if provider == "groq":
         ModelClass = Groq
         team_model_id = os.environ.get("GROQ_TEAM_MODEL_ID", "deepseek-r1-distill-llama-70b")
         agent_model_id = os.environ.get("GROQ_AGENT_MODEL_ID", "qwen-2.5-32b")
         logger.info(f"Using Groq: Team Model='{team_model_id}', Agent Model='{agent_model_id}'")
     elif provider == "openrouter":
         ModelClass = OpenRouter
-        team_model_id = os.environ.get("OPENROUTER_TEAM_MODEL_ID", "deepseek/deepseek-chat-v3-0324")
-        agent_model_id = os.environ.get("OPENROUTER_AGENT_MODEL_ID", "deepseek/deepseek-r1")
+        team_model_id = os.environ.get("OPENROUTER_TEAM_MODEL_ID", "openai/o4-mini-high")
+        agent_model_id = os.environ.get("OPENROUTER_AGENT_MODEL_ID", "openai/o3")
         logger.info(f"Using OpenRouter: Team Model='{team_model_id}', Agent Model='{agent_model_id}'")
     else:
-        logger.error(f"Unsupported LLM_PROVIDER: {provider}. Defaulting to DeepSeek.")
-        ModelClass = DeepSeek
-        team_model_id = "deepseek-chat"
-        agent_model_id = "deepseek-chat"
+        logger.error(f"Unsupported LLM_PROVIDER: {provider}. Defaulting to OpenRouter.")
+        ModelClass = OpenRouter
+        team_model_id = "deepseek/deepseek-chat-v3-0324:free"
+        agent_model_id = "deepseek/deepseek-r1-0528:free"
 
     return ModelClass, team_model_id, agent_model_id
 
