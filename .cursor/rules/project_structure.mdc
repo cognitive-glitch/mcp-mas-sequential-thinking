@@ -25,6 +25,5 @@ This is a Python project implementing a Multi-Agent System (MAS) for sequential 
 ## Documentation
 
 *   **Primary README:** [`README.md`](mdc:README.md)
-*   **Chinese README:** [`README.zh-CN.md`](mdc:README.zh-CN.md)
 
 Understanding the interaction between the Coordinator (`Team` in `coordinate` mode) and the specialist agents within [`main.py`](mdc:main.py) is crucial for modifying the core sequential thinking logic. Refer to the [`README.md`](mdc:README.md) for detailed workflow explanations.
