@@ -64,8 +64,8 @@ class LLMProviderFactory:
             api_key_env="OPENROUTER_API_KEY",
             team_model_env="OPENROUTER_TEAM_MODEL_ID",
             agent_model_env="OPENROUTER_AGENT_MODEL_ID",
-            default_team_model="openai/gpt-4-turbo",
-            default_agent_model="anthropic/claude-3-haiku",
+            default_team_model="openai/o3",
+            default_agent_model="google/gemini-2.5-flash",
             model_class=OpenRouter,
         ),
         "openai": ProviderConfig(
@@ -73,8 +73,8 @@ class LLMProviderFactory:
             api_key_env="OPENAI_API_KEY",
             team_model_env="OPENAI_TEAM_MODEL_ID",
             agent_model_env="OPENAI_AGENT_MODEL_ID",
-            default_team_model="gpt-4-turbo",
-            default_agent_model="gpt-4o-mini",
+            default_team_model="o3",
+            default_agent_model="o4-mini",
             model_class=OpenAIChat,
         ),
         "gemini": ProviderConfig(
@@ -82,8 +82,8 @@ class LLMProviderFactory:
             api_key_env="GOOGLE_API_KEY",
             team_model_env="GEMINI_TEAM_MODEL_ID",
             agent_model_env="GEMINI_AGENT_MODEL_ID",
-            default_team_model="gemini-2.0-flash",
-            default_agent_model="gemini-2.0-flash",
+            default_team_model="gemini-2.5-pro",
+            default_agent_model="gemini-2.5-flash",
             model_class=Gemini,
         ),
         "groq": ProviderConfig(
