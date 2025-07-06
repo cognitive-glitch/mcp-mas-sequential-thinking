@@ -1,0 +1,125 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": {
+          "tool_name": "Edit|Write|MultiEdit",
+          "file_paths": ["*.py"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && uv run ruff check --fix $CLAUDE_FILE_PATHS && uv run pyright $CLAUDE_FILE_PATHS",
+            "timeout": 30,
+            "description": "Auto-lint and type-check Python files after editing"
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "tool_name": "Edit|Write|MultiEdit",
+          "file_paths": ["pyproject.toml", "requirements*.txt", "*.lock"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && echo '🔄 Dependencies updated. Consider running: uv pip install -e \".[dev]\"'",
+            "timeout": 5,
+            "description": "Notify when dependency files are updated"
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "tool_name": "Edit|Write|MultiEdit",
+          "file_paths": ["tests/*.py"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && uv run pytest $CLAUDE_FILE_PATHS -v --tb=short",
+            "timeout": 60,
+            "description": "Run specific tests after test file modifications"
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "tool_name": "Edit|Write|MultiEdit", 
+          "file_paths": ["main_refactored.py", "src/**/*.py"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && echo '⚡ Core files modified. Run integration tests: uv run pytest tests/test_integration.py'",
+            "timeout": 5,
+            "description": "Suggest integration tests for core modifications"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": {
+          "tool_name": "Bash",
+          "command_patterns": ["rm -rf", "sudo", "pip install", "npm install"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️  Potentially destructive command detected: $CLAUDE_COMMAND' && read -p 'Continue? (y/N): ' confirm && [[ $confirm == [yY] ]]",
+            "timeout": 30,
+            "description": "Confirm destructive operations"
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "tool_name": "Bash",
+          "command_patterns": ["git push", "git merge", "git rebase"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && git status --porcelain | head -5 && echo '📋 Git operation: $CLAUDE_COMMAND'",
+            "timeout": 10,
+            "description": "Show git status before git operations"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[$(date)] Claude notification: $CLAUDE_NOTIFICATION' >> ~/.claude_activity.log",
+            "timeout": 5,
+            "description": "Log all Claude notifications"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/dev/GitHub/reflective-sequential-thinking-mcp && echo '🏁 Session completed. Project status:' && git status --short",
+            "timeout": 10,
+            "description": "Show project status when session ends"
+          }
+        ]
+      }
+    ]
+  },
+  "hookSettings": {
+    "enableHooks": true,
+    "defaultTimeout": 30,
+    "continueOnHookFailure": true,
+    "logHookExecution": true,
+    "maxConcurrentHooks": 3
+  }
+}

@@ -455,3 +455,113 @@ async def get_team_response_with_retry(team, input_prompt, max_retries=2):
     
     return None
 ```
+
+## Claude Code Hooks Integration
+
+This project includes comprehensive Claude Code hooks integration for automated development workflow enhancement.
+
+### Quick Setup
+
+1. **Install hooks configuration**:
+```bash
+./.claude/install-hooks.sh
+```
+
+2. **Test hooks functionality**:
+```bash
+./.claude/test-hooks.sh
+```
+
+3. **Manage hooks status**:
+```bash
+./.claude/manage-hooks.sh status
+```
+
+### Available Hook Scripts
+
+| **Script** | **Purpose** | **Usage** |
+|------------|-------------|-----------|
+| `install-hooks.sh` | Install/update hooks configuration | `./.claude/install-hooks.sh [--force] [--test]` |
+| `test-hooks.sh` | Test hooks functionality | `./.claude/test-hooks.sh [--simulate] [--verbose]` |
+| `manage-hooks.sh` | Enable/disable/manage hooks | `./.claude/manage-hooks.sh [enable\|disable\|status]` |
+
+### Automated Workflows
+
+When properly configured, Claude Code hooks provide:
+
+#### PostToolUse Automation
+- **Python files (`*.py`)**: Automatic `ruff check --fix` and `pyright` type checking
+- **Test files (`tests/*.py`)**: Automatic test execution with `pytest`
+- **Dependency files**: Notifications about dependency updates
+- **Core files**: Suggestions to run integration tests
+
+#### PreToolUse Safety
+- **Destructive commands**: User confirmation for `rm -rf`, `sudo` operations
+- **Git operations**: Status display before `git push`, `git merge`
+
+#### Session Management
+- **Activity logging**: All Claude notifications logged to `~/.claude_activity.log`
+- **Session summaries**: Project status display when sessions end
+
+### Configuration Details
+
+The hooks configuration is stored in `~/.claude/settings.json` and includes:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [...],
+    "PreToolUse": [...],
+    "Notification": [...],
+    "Stop": [...]
+  },
+  "hookSettings": {
+    "enableHooks": true,
+    "defaultTimeout": 30,
+    "continueOnHookFailure": true,
+    "logHookExecution": true,
+    "maxConcurrentHooks": 3
+  }
+}
+```
+
+### Environment Variables in Hooks
+
+Hooks have access to these environment variables:
+- `$CLAUDE_FILE_PATHS`: Space-separated file paths for file operations
+- `$CLAUDE_COMMAND`: The command being executed (Bash tool)
+- `$CLAUDE_NOTIFICATION`: Notification content
+- `$CLAUDE_TOOL_OUTPUT`: Tool execution output
+
+### Security Considerations
+
+⚠️ **Important**: Hooks execute with full user permissions. The provided configuration:
+- Uses safe, non-destructive commands by default
+- Includes timeout limits to prevent hanging
+- Validates inputs and uses absolute paths
+- Provides user confirmation for potentially dangerous operations
+
+### Troubleshooting
+
+**Common Issues:**
+1. **Hooks not executing**: Check `enableHooks: true` in settings
+2. **Permission errors**: Ensure scripts are executable (`chmod +x`)
+3. **Tool not found**: Verify `uv`, `ruff`, `pyright` are available
+4. **Timeout issues**: Increase timeout values for slow operations
+
+**Debug Commands:**
+```bash
+# Check hooks status
+./.claude/manage-hooks.sh status
+
+# Test specific functionality
+./.claude/test-hooks.sh --verbose
+
+# View recent activity
+tail ~/.claude_activity.log
+
+# Temporarily disable hooks
+./.claude/manage-hooks.sh disable
+```
+
+For complete documentation, see [`.claude/README.md`](.claude/README.md).

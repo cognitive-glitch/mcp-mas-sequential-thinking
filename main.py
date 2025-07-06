@@ -13,8 +13,15 @@ from agno.team.team import Team
 from agno.tools.exa import ExaTools
 from agno.tools.thinking import ThinkingTools
 from dotenv import load_dotenv
-from pydantic import (BaseModel, ConfigDict, Field, ValidationError,
-                      field_validator, model_validator, ValidationInfo)
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+    ValidationInfo,
+)
 
 import logging
 import logging.handlers
@@ -22,6 +29,7 @@ from pathlib import Path
 
 load_dotenv()
 os.environ["LLM_PROVIDER"] = "openrouter"
+
 
 def setup_logging() -> logging.Logger:
     """
@@ -42,16 +50,16 @@ def setup_logging() -> logging.Logger:
 
     # Log format
     formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - [%(name)s] - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s - %(levelname)s - [%(name)s] - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # File handler with rotation
     file_handler = logging.handlers.RotatingFileHandler(
         log_dir / "sequential_thinking.log",
-        maxBytes=10*1024*1024,  # 10MB
+        maxBytes=10 * 1024 * 1024,  # 10MB
         backupCount=5,
-        encoding='utf-8'
+        encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
@@ -67,53 +75,52 @@ def setup_logging() -> logging.Logger:
 
     return logger
 
+
 logger = setup_logging()
+
 
 class ThoughtData(BaseModel):
     """
     Represents the data structure for a single thought within the sequential
     thinking process. Serves as the input schema for the 'sequentialthinking' tool.
     """
+
     thought: str = Field(
         ...,
         description="Content of the current thought or step. Should be specific enough to imply the desired action (e.g., 'Analyze X', 'Critique Y', 'Plan Z', 'Research A').",
-        min_length=1
+        min_length=1,
     )
     thoughtNumber: int = Field(
-        ...,
-        description="Sequence number of this thought (starting from 1).",
-        ge=1
+        ..., description="Sequence number of this thought (starting from 1).", ge=1
     )
     totalThoughts: int = Field(
         ...,
         description="Estimated total number of thoughts required for the entire process.",
-        ge=1 # Basic positive check; minimum value is enforced by validator.
+        ge=1,  # Basic positive check; minimum value is enforced by validator.
     )
     nextThoughtNeeded: bool = Field(
-        ...,
-        description="Indicates if another thought step is expected after this one."
+        ..., description="Indicates if another thought step is expected after this one."
     )
     isRevision: bool = Field(
-        False,
-        description="Flags if this thought revises a previous one."
+        False, description="Flags if this thought revises a previous one."
     )
     revisesThought: Optional[int] = Field(
         None,
         description="The 'thoughtNumber' being revised, required if isRevision is True.",
-        ge=1
+        ge=1,
     )
     branchFromThought: Optional[int] = Field(
         None,
         description="The 'thoughtNumber' from which this thought initiates a branch.",
-        ge=1
+        ge=1,
     )
     branchId: Optional[str] = Field(
         None,
-        description="A unique identifier for the branch, required if branchFromThought is set."
+        description="A unique identifier for the branch, required if branchFromThought is set.",
     )
     needsMoreThoughts: bool = Field(
         False,
-        description="Flags if more thoughts are needed beyond the current 'totalThoughts' estimate."
+        description="Flags if more thoughts are needed beyond the current 'totalThoughts' estimate.",
     )
 
     # Pydantic model configuration
@@ -127,33 +134,35 @@ class ThoughtData(BaseModel):
                 {
                     "thought": "Analyze the core assumptions of the previous step.",
                     "thoughtNumber": 2,
-                    "totalThoughts": 5, # Example reflects minimum
+                    "totalThoughts": 5,  # Example reflects minimum
                     "nextThoughtNeeded": True,
                     "isRevision": False,
                     "revisesThought": None,
                     "branchFromThought": None,
                     "branchId": None,
-                    "needsMoreThoughts": False
+                    "needsMoreThoughts": False,
                 },
                 {
                     "thought": "Critique the proposed solution for potential biases.",
                     "thoughtNumber": 4,
-                    "totalThoughts": 5, # Example reflects minimum
+                    "totalThoughts": 5,  # Example reflects minimum
                     "nextThoughtNeeded": True,
                     "isRevision": False,
                     "revisesThought": None,
                     "branchFromThought": None,
                     "branchId": None,
-                    "needsMoreThoughts": False
-                }
+                    "needsMoreThoughts": False,
+                },
             ]
-        }
+        },
     )
 
     # --- Validators ---
-    MIN_TOTAL_THOUGHTS: ClassVar[int] = 5 # Class constant for minimum required total thoughts.
+    MIN_TOTAL_THOUGHTS: ClassVar[int] = (
+        5  # Class constant for minimum required total thoughts.
+    )
 
-    @field_validator('totalThoughts')
+    @field_validator("totalThoughts")
     @classmethod
     def validate_total_thoughts_minimum(cls, v: int) -> int:
         """Ensures 'totalThoughts' meets the defined minimum requirement."""
@@ -165,34 +174,45 @@ class ThoughtData(BaseModel):
             return cls.MIN_TOTAL_THOUGHTS
         return v
 
-    @field_validator('revisesThought')
+    @field_validator("revisesThought")
     @classmethod
-    def validate_revises_thought(cls, v: Optional[int], info: ValidationInfo) -> Optional[int]:
+    def validate_revises_thought(
+        cls, v: Optional[int], info: ValidationInfo
+    ) -> Optional[int]:
         """Validates 'revisesThought' logic."""
-        is_revision = info.data.get('isRevision', False)
+        is_revision = info.data.get("isRevision", False)
         if v is not None and not is_revision:
-            raise ValueError('revisesThought can only be set when isRevision is True')
+            raise ValueError("revisesThought can only be set when isRevision is True")
         # Ensure the revised thought number is valid and precedes the current thought
-        if v is not None and 'thoughtNumber' in info.data and v >= info.data['thoughtNumber']:
-             raise ValueError('revisesThought must be less than thoughtNumber')
+        if (
+            v is not None
+            and "thoughtNumber" in info.data
+            and v >= info.data["thoughtNumber"]
+        ):
+            raise ValueError("revisesThought must be less than thoughtNumber")
         return v
 
-    @field_validator('branchId')
+    @field_validator("branchId")
     @classmethod
-    def validate_branch_id(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+    def validate_branch_id(
+        cls, v: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
         """Validates 'branchId' logic."""
-        branch_from_thought = info.data.get('branchFromThought')
+        branch_from_thought = info.data.get("branchFromThought")
         if v is not None and branch_from_thought is None:
-            raise ValueError('branchId can only be set when branchFromThought is set')
+            raise ValueError("branchId can only be set when branchFromThought is set")
         return v
 
-    @model_validator(mode='after')
-    def validate_thought_numbers(self) -> 'ThoughtData':
+    @model_validator(mode="after")
+    def validate_thought_numbers(self) -> "ThoughtData":
         """Performs model-level validation on thought numbering."""
         # Allow thoughtNumber > totalThoughts for dynamic adjustment downstream.
         # revisesThought validation is handled by its field_validator.
-        if self.branchFromThought is not None and self.branchFromThought >= self.thoughtNumber:
-            raise ValueError('branchFromThought must be less than thoughtNumber')
+        if (
+            self.branchFromThought is not None
+            and self.branchFromThought >= self.thoughtNumber
+        ):
+            raise ValueError("branchFromThought must be less than thoughtNumber")
         # Check for self.thoughtNumber <= self.totalThoughts removed;
         # allows dynamic extension before needsMoreThoughts logic applies.
         # Minimum totalThoughts is handled by its own validator.
@@ -200,6 +220,7 @@ class ThoughtData(BaseModel):
 
 
 # --- Utility for Formatting Thoughts (for Logging) ---
+
 
 def format_thought_for_log(thought_data: ThoughtData) -> str:
     """Formats a ThoughtData object into a human-readable string for logging.
@@ -228,40 +249,47 @@ def format_thought_for_log(thought_data: ThoughtData) -> str:
     """
     prefix: str
     context: str = ""
-    branch_info_log: Optional[str] = None # Optional line for branch-specific details
+    branch_info_log: Optional[str] = None  # Optional line for branch-specific details
 
     # Determine the type of thought and associated context
     if thought_data.isRevision and thought_data.revisesThought is not None:
-        prefix = 'Revision'
-        context = f' (revising thought {thought_data.revisesThought})'
-    elif thought_data.branchFromThought is not None and thought_data.branchId is not None:
-        prefix = 'Branch'
-        context = f' (from thought {thought_data.branchFromThought}, ID: {thought_data.branchId})'
+        prefix = "Revision"
+        context = f" (revising thought {thought_data.revisesThought})"
+    elif (
+        thought_data.branchFromThought is not None and thought_data.branchId is not None
+    ):
+        prefix = "Branch"
+        context = f" (from thought {thought_data.branchFromThought}, ID: {thought_data.branchId})"
         # Prepare the extra detail line for branches
         branch_info_log = f"  Branch Details: ID='{thought_data.branchId}', originates from Thought #{thought_data.branchFromThought}"
     else:
         # Standard thought
-        prefix = 'Thought'
+        prefix = "Thought"
         # No extra context needed for standard thoughts
 
     # Construct the header line (e.g., "Thought 1/5", "Revision 3/5 (revising thought 2)")
-    header = f"{prefix} {thought_data.thoughtNumber}/{thought_data.totalThoughts}{context}"
+    header = (
+        f"{prefix} {thought_data.thoughtNumber}/{thought_data.totalThoughts}{context}"
+    )
 
     # Assemble the log entry lines
     log_lines = [
         header,
-        f"  Thought: {thought_data.thought}" # Indent thought content
+        f"  Thought: {thought_data.thought}",  # Indent thought content
     ]
     if branch_info_log:
-        log_lines.append(branch_info_log) # Add branch details if applicable
+        log_lines.append(branch_info_log)  # Add branch details if applicable
 
     # Add status flags line
-    log_lines.append(f"  Next Needed: {thought_data.nextThoughtNeeded}, Needs More: {thought_data.needsMoreThoughts}")
+    log_lines.append(
+        f"  Next Needed: {thought_data.nextThoughtNeeded}, Needs More: {thought_data.needsMoreThoughts}"
+    )
 
     return "\n".join(log_lines)
 
 
 # --- Agno Multi-Agent Team Setup ---
+
 
 def get_model_config() -> tuple[Type[Model], str, str]:
     """
@@ -278,14 +306,22 @@ def get_model_config() -> tuple[Type[Model], str, str]:
 
     if provider == "groq":
         ModelClass = Groq
-        team_model_id = os.environ.get("GROQ_TEAM_MODEL_ID", "deepseek-r1-distill-llama-70b")
+        team_model_id = os.environ.get(
+            "GROQ_TEAM_MODEL_ID", "deepseek-r1-distill-llama-70b"
+        )
         agent_model_id = os.environ.get("GROQ_AGENT_MODEL_ID", "qwen-2.5-32b")
-        logger.info(f"Using Groq: Team Model='{team_model_id}', Agent Model='{agent_model_id}'")
+        logger.info(
+            f"Using Groq: Team Model='{team_model_id}', Agent Model='{agent_model_id}'"
+        )
     elif provider == "openrouter":
         ModelClass = OpenRouter
-        team_model_id = os.environ.get("OPENROUTER_TEAM_MODEL_ID", "openai/o4-mini-high")
+        team_model_id = os.environ.get(
+            "OPENROUTER_TEAM_MODEL_ID", "openai/o4-mini-high"
+        )
         agent_model_id = os.environ.get("OPENROUTER_AGENT_MODEL_ID", "openai/o3")
-        logger.info(f"Using OpenRouter: Team Model='{team_model_id}', Agent Model='{agent_model_id}'")
+        logger.info(
+            f"Using OpenRouter: Team Model='{team_model_id}', Agent Model='{agent_model_id}'"
+        )
     else:
         logger.error(f"Unsupported LLM_PROVIDER: {provider}. Defaulting to OpenRouter.")
         ModelClass = OpenRouter
@@ -310,7 +346,9 @@ def create_sequential_thinking_team() -> Team:
 
     except Exception as e:
         logger.error(f"Error initializing models: {e}")
-        logger.error("Please ensure the necessary API keys and configurations are set for the selected provider ({os.environ.get('LLM_PROVIDER', 'deepseek')}).")
+        logger.error(
+            "Please ensure the necessary API keys and configurations are set for the selected provider ({os.environ.get('LLM_PROVIDER', 'deepseek')})."
+        )
         sys.exit(1)
 
     # REMOVED the separate Coordinator Agent definition.
@@ -335,9 +373,9 @@ def create_sequential_thinking_team() -> Team:
             " 7. Return your response to the Team Coordinator.",
             "Focus on fulfilling the delegated planning sub-task accurately and efficiently.",
         ],
-        model=agent_model_instance, # Use the designated agent model
+        model=agent_model_instance,  # Use the designated agent model
         add_datetime_to_instructions=True,
-        markdown=True
+        markdown=True,
     )
 
     researcher = Agent(
@@ -358,9 +396,9 @@ def create_sequential_thinking_team() -> Team:
             " 7. Return your response to the Team Coordinator.",
             "Focus on accuracy and relevance for the delegated research request.",
         ],
-        model=agent_model_instance, # Use the designated agent model
+        model=agent_model_instance,  # Use the designated agent model
         add_datetime_to_instructions=True,
-        markdown=True
+        markdown=True,
     )
 
     analyzer = Agent(
@@ -381,9 +419,9 @@ def create_sequential_thinking_team() -> Team:
             " 7. Return your response to the Team Coordinator.",
             "Focus on depth and clarity for the delegated analytical task.",
         ],
-        model=agent_model_instance, # Use the designated agent model
+        model=agent_model_instance,  # Use the designated agent model
         add_datetime_to_instructions=True,
-        markdown=True
+        markdown=True,
     )
 
     critic = Agent(
@@ -405,9 +443,9 @@ def create_sequential_thinking_team() -> Team:
             " 8. Return your response to the Team Coordinator.",
             "Focus on rigorous and constructive critique for the delegated evaluation task.",
         ],
-        model=agent_model_instance, # Use the designated agent model
+        model=agent_model_instance,  # Use the designated agent model
         add_datetime_to_instructions=True,
-        markdown=True
+        markdown=True,
     )
 
     synthesizer = Agent(
@@ -428,9 +466,9 @@ def create_sequential_thinking_team() -> Team:
             "Focus on creating clarity and coherence for the delegated synthesis task.",
             "**For the final synthesis task provided by the Coordinator:** Aim for a concise and high-level integration. Focus on the core synthesized understanding and key takeaways, rather than detailing the step-by-step process or extensive analysis of each component.",
         ],
-        model=agent_model_instance, # Use the designated agent model
+        model=agent_model_instance,  # Use the designated agent model
         add_datetime_to_instructions=True,
-        markdown=True
+        markdown=True,
     )
 
     # Create the team with coordinate mode.
@@ -438,8 +476,14 @@ def create_sequential_thinking_team() -> Team:
     team = Team(
         name="SequentialThinkingTeam",
         mode="coordinate",
-        members=[planner, researcher, analyzer, critic, synthesizer], # ONLY specialist agents
-        model=team_model_instance, # Model for the Team's coordination logic
+        members=[
+            planner,
+            researcher,
+            analyzer,
+            critic,
+            synthesizer,
+        ],  # ONLY specialist agents
+        model=team_model_instance,  # Model for the Team's coordination logic
         description="You are the Coordinator of a specialist team processing sequential thoughts. Your role is to manage the flow, delegate tasks, and synthesize results.",
         instructions=[
             "You are the Coordinator managing a team of specialists (Planner, Researcher, Analyzer, Critic, Synthesizer) in 'coordinate' mode.",
@@ -461,23 +505,26 @@ def create_sequential_thinking_team() -> Team:
             " - Integrate specialist responses logically.",
             " - Resolve conflicts or highlight discrepancies.",
             " - Formulate a final answer representing the combined effort.",
-            "Remember: Orchestrate the team effectively and efficiently."
+            "Remember: Orchestrate the team effectively and efficiently.",
         ],
         success_criteria="Break down input thoughts into appropriate sub-tasks, delegate efficiently to specialists, synthesize responses into cohesive output",
-        enable_agentic_context=False, # Allows context sharing managed by the Team (coordinator)
-        share_member_interactions=False, # Allows members' interactions to be shared
+        enable_agentic_context=False,  # Allows context sharing managed by the Team (coordinator)
+        share_member_interactions=False,  # Allows members' interactions to be shared
         markdown=True,
         debug_mode=False,
-        add_datetime_to_instructions=True
+        add_datetime_to_instructions=True,
     )
 
     return team
 
+
 # --- Application Context and Lifespan Management ---
+
 
 @dataclass
 class AppContext:
     """Holds shared application resources, like the Agno team."""
+
     team: Team
     thought_history: List[ThoughtData] = field(default_factory=list)
     branches: Dict[str, List[ThoughtData]] = field(default_factory=dict)
@@ -498,9 +545,13 @@ class AppContext:
 
     def get_all_branches(self) -> Dict[str, int]:
         """Get all branch IDs and their thought counts"""
-        return {branch_id: len(thoughts) for branch_id, thoughts in self.branches.items()}
+        return {
+            branch_id: len(thoughts) for branch_id, thoughts in self.branches.items()
+        }
+
 
 app_context: Optional[AppContext] = None
+
 
 @asynccontextmanager
 async def app_lifespan() -> AsyncIterator[None]:
@@ -511,9 +562,13 @@ async def app_lifespan() -> AsyncIterator[None]:
         team = create_sequential_thinking_team()
         app_context = AppContext(team=team)
         provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-        logger.info(f"Agno team initialized in coordinate mode using provider: {provider}.")
+        logger.info(
+            f"Agno team initialized in coordinate mode using provider: {provider}."
+        )
     except Exception as e:
-        logger.critical(f"Failed to initialize Agno team during lifespan setup: {e}", exc_info=True)
+        logger.critical(
+            f"Failed to initialize Agno team during lifespan setup: {e}", exc_info=True
+        )
         # Decide how to handle this - re-raise, exit, or continue without a team?
         # For now, re-raise to prevent server starting in a broken state.
         raise e
@@ -524,10 +579,12 @@ async def app_lifespan() -> AsyncIterator[None]:
         logger.info("Shutting down application resources...")
         app_context = None
 
+
 # Initialize FastMCP
 mcp = FastMCP()
 
 # --- MCP Handlers ---
+
 
 @mcp.prompt("sequential-thinking")
 def sequential_thinking_prompt(problem: str, context: str = ""):
@@ -535,12 +592,12 @@ def sequential_thinking_prompt(problem: str, context: str = ""):
     Starter prompt for sequential thinking that ENCOURAGES non-linear exploration
     using coordinate mode. Returns separate user and assistant messages.
     """
-    min_thoughts = 5 # Set a reasonable minimum number of initial thoughts
+    min_thoughts = 5  # Set a reasonable minimum number of initial thoughts
 
     user_prompt_text = f"""Initiate a comprehensive sequential thinking process for the following problem:
 
 Problem: {problem}
-{f'Context: {context}' if context else ''}"""
+{f"Context: {context}" if context else ""}"""
 
     assistant_guidelines = f"""Okay, let's start the sequential thinking process. Here are the guidelines and the process we'll follow using the 'coordinate' mode team:
 
@@ -569,17 +626,27 @@ Proceed with the first thought based on these guidelines."""
             "description": "Starter prompt for non-linear sequential thinking (coordinate mode), providing problem and guidelines separately.",
             "messages": [
                 {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
-                {"role": "assistant", "content": {"type": "text", "text": assistant_guidelines}}
-            ]
+                {
+                    "role": "assistant",
+                    "content": {"type": "text", "text": assistant_guidelines},
+                },
+            ],
         }
     ]
 
 
 @mcp.tool()
-async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: int, nextThoughtNeeded: bool,
-                      isRevision: bool = False, revisesThought: Optional[int] = None,
-                      branchFromThought: Optional[int] = None, branchId: Optional[str] = None,
-                      needsMoreThoughts: bool = False) -> str:
+async def sequentialthinking(
+    thought: str,
+    thoughtNumber: int,
+    totalThoughts: int,
+    nextThoughtNeeded: bool,
+    isRevision: bool = False,
+    revisesThought: Optional[int] = None,
+    branchFromThought: Optional[int] = None,
+    branchId: Optional[str] = None,
+    needsMoreThoughts: bool = False,
+) -> str:
     """
     A detailed tool for dynamic and reflective problem-solving through thoughts.
 
@@ -638,19 +705,24 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
     """
     global app_context
     if not app_context or not app_context.team:
-        logger.error("Application context or Agno team not initialized during tool call.")
+        logger.error(
+            "Application context or Agno team not initialized during tool call."
+        )
         # Attempt re-initialization cautiously, or fail hard.
         # Let's try re-initialization if app_lifespan wasn't used or failed silently.
         logger.warning("Attempting to re-initialize team due to missing context...")
         try:
-             team = create_sequential_thinking_team()
-             app_context = AppContext(team=team) # Re-create context
-             logger.info("Successfully re-initialized team and context.")
+            team = create_sequential_thinking_team()
+            app_context = AppContext(team=team)  # Re-create context
+            logger.info("Successfully re-initialized team and context.")
         except Exception as init_err:
-             logger.critical(f"Failed to re-initialize Agno team during tool call: {init_err}", exc_info=True)
-             # Return only the error message string
-             return f"Critical Error: Application context not available and re-initialization failed: {init_err}"
-             # Or raise Exception("Critical Error: Application context not available.")
+            logger.critical(
+                f"Failed to re-initialize Agno team during tool call: {init_err}",
+                exc_info=True,
+            )
+            # Return only the error message string
+            return f"Critical Error: Application context not available and re-initialization failed: {init_err}"
+            # Or raise Exception("Critical Error: Application context not available.")
 
     try:
         # --- Initial Validation and Adjustments ---
@@ -658,13 +730,13 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
         current_input_thought = ThoughtData(
             thought=thought,
             thoughtNumber=thoughtNumber,
-            totalThoughts=totalThoughts, # Pydantic validator handles minimum now
+            totalThoughts=totalThoughts,  # Pydantic validator handles minimum now
             nextThoughtNeeded=nextThoughtNeeded,
             isRevision=isRevision,
             revisesThought=revisesThought,
             branchFromThought=branchFromThought,
             branchId=branchId,
-            needsMoreThoughts=needsMoreThoughts
+            needsMoreThoughts=needsMoreThoughts,
         )
 
         # Use the validated/adjusted value from the instance
@@ -672,20 +744,25 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
 
         # Adjust nextThoughtNeeded based on validated totalThoughts
         adjusted_next_thought_needed = current_input_thought.nextThoughtNeeded
-        if current_input_thought.thoughtNumber >= adjusted_total_thoughts and not current_input_thought.needsMoreThoughts:
-             adjusted_next_thought_needed = False
+        if (
+            current_input_thought.thoughtNumber >= adjusted_total_thoughts
+            and not current_input_thought.needsMoreThoughts
+        ):
+            adjusted_next_thought_needed = False
 
         # Re-create or update the instance if nextThoughtNeeded changed
         # Pydantic models are typically immutable (frozen=True), so create a new one if needed.
         # Check if adjustment is necessary before creating new object
         final_thought_data = current_input_thought
         if adjusted_next_thought_needed != current_input_thought.nextThoughtNeeded:
-             logger.info(f"Adjusting nextThoughtNeeded from {current_input_thought.nextThoughtNeeded} to {adjusted_next_thought_needed} based on thoughtNumber/totalThoughts.")
-             # Since frozen=True, we need to create a new instance or handle mutability differently.
-             # Easiest here might be to create a mutable copy for this logic if needed,
-             # or pass adjusted_next_thought_needed separately. Let's pass it separately for now.
-             # OR, make the model mutable if this becomes complex.
-             # Let's keep it simple: the logic below uses the adjusted flag directly.
+            logger.info(
+                f"Adjusting nextThoughtNeeded from {current_input_thought.nextThoughtNeeded} to {adjusted_next_thought_needed} based on thoughtNumber/totalThoughts."
+            )
+            # Since frozen=True, we need to create a new instance or handle mutability differently.
+            # Easiest here might be to create a mutable copy for this logic if needed,
+            # or pass adjusted_next_thought_needed separately. Let's pass it separately for now.
+            # OR, make the model mutable if this becomes complex.
+            # Let's keep it simple: the logic below uses the adjusted flag directly.
 
         # --- Logging and History Update ---
         log_prefix = "--- Received Thought ---"
@@ -703,45 +780,59 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
         # Add the *validated* thought to history
         app_context.add_thought(final_thought_data)
 
-
         # --- Process Thought with Team (Coordinate Mode) ---
-        logger.info(f"Passing thought #{final_thought_data.thoughtNumber} to the Coordinator...")
+        logger.info(
+            f"Passing thought #{final_thought_data.thoughtNumber} to the Coordinator..."
+        )
 
         # Prepare input for the team coordinator. Pass the core thought content.
         # Include context about revision/branching directly in the input string for the coordinator.
         input_prompt = f"Process Thought #{final_thought_data.thoughtNumber}:\n"
-        if final_thought_data.isRevision and final_thought_data.revisesThought is not None:
-             # Find the original thought text
-             original_thought_text = "Unknown Original Thought"
-             for hist_thought in app_context.thought_history[:-1]: # Exclude current one
-                 if hist_thought.thoughtNumber == final_thought_data.revisesThought:
-                     original_thought_text = hist_thought.thought
-                     break
-             input_prompt += f"**This is a REVISION of Thought #{final_thought_data.revisesThought}** (Original: \"{original_thought_text}\").\n"
-        elif final_thought_data.branchFromThought is not None and final_thought_data.branchId is not None:
-             # Find the branching point thought text
-             branch_point_text = "Unknown Branch Point"
-             for hist_thought in app_context.thought_history[:-1]:
-                 if hist_thought.thoughtNumber == final_thought_data.branchFromThought:
-                     branch_point_text = hist_thought.thought
-                     break
-             input_prompt += f"**This is a BRANCH (ID: {final_thought_data.branchId}) from Thought #{final_thought_data.branchFromThought}** (Origin: \"{branch_point_text}\").\n"
+        if (
+            final_thought_data.isRevision
+            and final_thought_data.revisesThought is not None
+        ):
+            # Find the original thought text
+            original_thought_text = "Unknown Original Thought"
+            for hist_thought in app_context.thought_history[:-1]:  # Exclude current one
+                if hist_thought.thoughtNumber == final_thought_data.revisesThought:
+                    original_thought_text = hist_thought.thought
+                    break
+            input_prompt += f'**This is a REVISION of Thought #{final_thought_data.revisesThought}** (Original: "{original_thought_text}").\n'
+        elif (
+            final_thought_data.branchFromThought is not None
+            and final_thought_data.branchId is not None
+        ):
+            # Find the branching point thought text
+            branch_point_text = "Unknown Branch Point"
+            for hist_thought in app_context.thought_history[:-1]:
+                if hist_thought.thoughtNumber == final_thought_data.branchFromThought:
+                    branch_point_text = hist_thought.thought
+                    break
+            input_prompt += f'**This is a BRANCH (ID: {final_thought_data.branchId}) from Thought #{final_thought_data.branchFromThought}** (Origin: "{branch_point_text}").\n'
 
-        input_prompt += f"\nThought Content: \"{final_thought_data.thought}\""
+        input_prompt += f'\nThought Content: "{final_thought_data.thought}"'
 
         # Call the team's arun method. The coordinator agent will handle it.
         team_response = await app_context.team.arun(input_prompt)
 
         # Ensure coordinator_response is a string, default to empty string if None
-        coordinator_response_content = team_response.content if hasattr(team_response, 'content') else None
-        coordinator_response = str(coordinator_response_content) if coordinator_response_content is not None else ""
+        coordinator_response_content = (
+            team_response.content if hasattr(team_response, "content") else None
+        )
+        coordinator_response = (
+            str(coordinator_response_content)
+            if coordinator_response_content is not None
+            else ""
+        )
 
-        logger.info(f"Coordinator finished processing thought #{final_thought_data.thoughtNumber}.")
+        logger.info(
+            f"Coordinator finished processing thought #{final_thought_data.thoughtNumber}."
+        )
         logger.debug(f"Coordinator Raw Response:\n{coordinator_response}")
 
-
         # --- Guidance for Next Step (Coordinate Mode) ---
-        additional_guidance = "\n\nGuidance for next step:" # Initialize
+        additional_guidance = "\n\nGuidance for next step:"  # Initialize
 
         # Use the *potentially adjusted* flag here for correct guidance
         if not adjusted_next_thought_needed:
@@ -753,25 +844,28 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
             additional_guidance += " Use `isRevision=True`/`revisesThought=X` for revisions or `branchFromThought=Y`/`branchId='...'` for branching accordingly."
             additional_guidance += "\n- **Next Thought:** Based on the Coordinator's response, formulate the next logical thought, addressing any points raised."
 
-
         # --- Build Result ---
         result_data = {
             "processedThoughtNumber": final_thought_data.thoughtNumber,
-            "estimatedTotalThoughts": final_thought_data.totalThoughts, # Use validated value
-            "nextThoughtNeeded": adjusted_next_thought_needed, # Use potentially adjusted value
+            "estimatedTotalThoughts": final_thought_data.totalThoughts,  # Use validated value
+            "nextThoughtNeeded": adjusted_next_thought_needed,  # Use potentially adjusted value
             # Ensure both parts are strings before concatenating
             "coordinatorResponse": coordinator_response + str(additional_guidance),
             "branches": list(app_context.branches.keys()),
             "thoughtHistoryLength": len(app_context.thought_history),
             "branchDetails": {
-                "currentBranchId": final_thought_data.branchId if final_thought_data.branchFromThought is not None else "main",
+                "currentBranchId": final_thought_data.branchId
+                if final_thought_data.branchFromThought is not None
+                else "main",
                 "branchOriginThought": final_thought_data.branchFromThought,
-                "allBranches": app_context.get_all_branches() # Include counts
+                "allBranches": app_context.get_all_branches(),  # Include counts
             },
             "isRevision": final_thought_data.isRevision,
-            "revisesThought": final_thought_data.revisesThought if final_thought_data.isRevision else None,
+            "revisesThought": final_thought_data.revisesThought
+            if final_thought_data.isRevision
+            else None,
             "isBranch": final_thought_data.branchFromThought is not None,
-            "status": "success"
+            "status": "success",
         }
 
         # Return only the coordinatorResponse string
@@ -782,32 +876,37 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
         # Return only the error message string
         return f"Input validation failed: {e}"
     except Exception as e:
-        logger.exception("Error processing tool call") # Log full traceback
+        logger.exception("Error processing tool call")  # Log full traceback
         # Return only the error message string
         return f"An unexpected error occurred: {str(e)}"
 
+
 # --- Main Execution ---
+
 
 def run():
     """Initializes and runs the MCP server in coordinate mode."""
     selected_provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
     logger.info(f"Using provider: {selected_provider}")
-    logger.info(f"Initializing Sequential Thinking Server (Coordinate Mode) with Provider: {selected_provider}...")
+    logger.info(
+        f"Initializing Sequential Thinking Server (Coordinate Mode) with Provider: {selected_provider}..."
+    )
 
     global app_context
     # Initialize application resources using the lifespan manager implicitly if running via framework
     # For direct script execution, we initialize here.
     # If using app_lifespan, this manual init might be redundant depending on framework.
-    if not app_context: # Check if context already exists (e.g., from lifespan manager)
+    if not app_context:  # Check if context already exists (e.g., from lifespan manager)
         logger.info("Initializing application resources directly (Coordinate Mode)...")
         try:
-             team = create_sequential_thinking_team()
-             app_context = AppContext(team=team)
-             logger.info(f"Agno team initialized directly in coordinate mode using provider: {selected_provider}.")
+            team = create_sequential_thinking_team()
+            app_context = AppContext(team=team)
+            logger.info(
+                f"Agno team initialized directly in coordinate mode using provider: {selected_provider}."
+            )
         except Exception as e:
-             logger.critical(f"Failed to initialize Agno team: {e}", exc_info=True)
-             sys.exit(1)
-
+            logger.critical(f"Failed to initialize Agno team: {e}", exc_info=True)
+            sys.exit(1)
 
     try:
         logger.info("Sequential Thinking MCP Server running on stdio (Coordinate Mode)")
@@ -818,7 +917,8 @@ def run():
         mcp.run(transport="stdio")
     finally:
         logger.info("Shutting down application resources...")
-        app_context = None # Clean up context if initialized directly
+        app_context = None  # Clean up context if initialized directly
+
 
 def check_environment_variables():
     """Checks for necessary environment variables based on the selected provider."""
@@ -832,15 +932,23 @@ def check_environment_variables():
     elif provider == "openrouter":
         api_key_var = "OPENROUTER_API_KEY"
     if api_key_var and api_key_var not in os.environ:
-        logger.warning(f"{api_key_var} environment variable not found. Model initialization for '{provider}' might fail.")
+        logger.warning(
+            f"{api_key_var} environment variable not found. Model initialization for '{provider}' might fail."
+        )
     try:
-        ModelClass, _, _ = get_model_config() # Just need the class for dummy init
-        dummy_model = ModelClass(id="dummy-check") # Use a placeholder ID
-        researcher_for_check = Agent(name="CheckAgent", tools=[ExaTools()], model=dummy_model)
-        uses_exa = any(isinstance(t, ExaTools) for t in (researcher_for_check.tools or []))
+        ModelClass, _, _ = get_model_config()  # Just need the class for dummy init
+        dummy_model = ModelClass(id="dummy-check")  # Use a placeholder ID
+        researcher_for_check = Agent(
+            name="CheckAgent", tools=[ExaTools()], model=dummy_model
+        )
+        uses_exa = any(
+            isinstance(t, ExaTools) for t in (researcher_for_check.tools or [])
+        )
 
         if uses_exa and "EXA_API_KEY" not in os.environ:
-             logger.warning("EXA_API_KEY environment variable not found, but ExaTools are configured in a team member. Researcher agent might fail.")
+            logger.warning(
+                "EXA_API_KEY environment variable not found, but ExaTools are configured in a team member. Researcher agent might fail."
+            )
     except Exception as e:
         logger.error(f"Could not perform ExaTools check due to an error: {e}")
 
@@ -852,4 +960,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Failed during server run: {e}", exc_info=True)
         sys.exit(1)
-        

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ProviderConfig:
     """Configuration for an LLM provider."""
+
     def __init__(
         self,
         provider_name: str,
@@ -24,7 +25,7 @@ class ProviderConfig:
         agent_model_env: str,
         default_team_model: str,
         default_agent_model: str,
-        model_class: Type[Model]
+        model_class: Type[Model],
     ):
         self.provider_name = provider_name
         self.api_key_env = api_key_env
@@ -33,7 +34,7 @@ class ProviderConfig:
         self.default_team_model = default_team_model
         self.default_agent_model = default_agent_model
         self.model_class = model_class
-    
+
     def validate(self) -> None:
         """Validates that required environment variables are set."""
         if self.api_key_env not in os.environ:
@@ -41,13 +42,13 @@ class ProviderConfig:
                 f"Missing required API key environment variable: {self.api_key_env} "
                 f"for provider {self.provider_name}"
             )
-    
+
     def get_models(self) -> Tuple[str, str]:
         """Returns the team and agent model IDs."""
         team_model = os.environ.get(self.team_model_env, self.default_team_model)
         agent_model = os.environ.get(self.agent_model_env, self.default_agent_model)
         return team_model, agent_model
-    
+
     def create_model_instance(self, model_id: str, **kwargs) -> Model:
         """Creates a model instance with the given ID."""
         return self.model_class(id=model_id, **kwargs)
@@ -55,7 +56,7 @@ class ProviderConfig:
 
 class LLMProviderFactory:
     """Factory for creating LLM provider configurations."""
-    
+
     # Provider configurations
     PROVIDERS = {
         "openrouter": ProviderConfig(
@@ -65,7 +66,7 @@ class LLMProviderFactory:
             agent_model_env="OPENROUTER_AGENT_MODEL_ID",
             default_team_model="openai/gpt-4-turbo",
             default_agent_model="anthropic/claude-3-haiku",
-            model_class=OpenRouter
+            model_class=OpenRouter,
         ),
         "openai": ProviderConfig(
             provider_name="OpenAI",
@@ -74,7 +75,7 @@ class LLMProviderFactory:
             agent_model_env="OPENAI_AGENT_MODEL_ID",
             default_team_model="gpt-4-turbo",
             default_agent_model="gpt-4o-mini",
-            model_class=OpenAIChat
+            model_class=OpenAIChat,
         ),
         "gemini": ProviderConfig(
             provider_name="Google Gemini",
@@ -83,7 +84,7 @@ class LLMProviderFactory:
             agent_model_env="GEMINI_AGENT_MODEL_ID",
             default_team_model="gemini-2.0-flash",
             default_agent_model="gemini-2.0-flash",
-            model_class=Gemini
+            model_class=Gemini,
         ),
         "groq": ProviderConfig(
             provider_name="Groq",
@@ -92,63 +93,62 @@ class LLMProviderFactory:
             agent_model_env="GROQ_AGENT_MODEL_ID",
             default_team_model="llama-3.3-70b-versatile",
             default_agent_model="qwen-2.5-32b",
-            model_class=Groq
-        )
+            model_class=Groq,
+        ),
     }
-    
+
     @classmethod
     def get_provider_config(cls, provider_name: Optional[str] = None) -> ProviderConfig:
         """
         Gets the provider configuration for the specified provider.
-        
+
         Args:
             provider_name: Name of the provider. If None, uses LLM_PROVIDER env var.
                          Defaults to 'openrouter' if not set.
-        
+
         Returns:
             ProviderConfig instance
-        
+
         Raises:
             ValueError: If provider is not supported
         """
         if provider_name is None:
             provider_name = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-        
+
         if provider_name not in cls.PROVIDERS:
             available = ", ".join(cls.PROVIDERS.keys())
             raise ValueError(
                 f"Unsupported LLM provider: '{provider_name}'. "
                 f"Available providers: {available}"
             )
-        
+
         config = cls.PROVIDERS[provider_name]
         logger.info(f"Selected LLM Provider: {config.provider_name}")
-        
+
         return config
-    
+
     @classmethod
     def create_models(
-        cls, 
-        provider_name: Optional[str] = None
+        cls, provider_name: Optional[str] = None
     ) -> Tuple[Model, Model, ProviderConfig]:
         """
         Creates team and agent model instances.
-        
+
         Returns:
             Tuple of (team_model, agent_model, provider_config)
         """
         config = cls.get_provider_config(provider_name)
-        
+
         # Validate configuration
         config.validate()
-        
+
         # Get model IDs
         team_model_id, agent_model_id = config.get_models()
         logger.info(
             f"Using {config.provider_name}: "
             f"Team Model='{team_model_id}', Agent Model='{agent_model_id}'"
         )
-        
+
         # Create model instances
         try:
             team_model = config.create_model_instance(team_model_id)
@@ -159,9 +159,9 @@ class LLMProviderFactory:
                 f"Failed to initialize {config.provider_name} models: {e}. "
                 f"Please check your API key and model IDs."
             )
-        
+
         return team_model, agent_model, config
-    
+
     @classmethod
     def list_providers(cls) -> Dict[str, Dict[str, str]]:
         """Lists all available providers and their configurations."""
@@ -170,7 +170,7 @@ class LLMProviderFactory:
                 "provider_name": config.provider_name,
                 "api_key_env": config.api_key_env,
                 "default_team_model": config.default_team_model,
-                "default_agent_model": config.default_agent_model
+                "default_agent_model": config.default_agent_model,
             }
             for name, config in cls.PROVIDERS.items()
         }
