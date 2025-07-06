@@ -22,6 +22,7 @@ import logging.handlers
 from pathlib import Path
 
 load_dotenv()
+os.environ["LLM_PROVIDER"] = "openrouter"
 
 def setup_logging() -> logging.Logger:
     """
@@ -516,7 +517,7 @@ async def app_lifespan() -> AsyncIterator[None]:
     try:
         team = create_sequential_thinking_team()
         app_context = AppContext(team=team)
-        provider = os.environ.get("LLM_PROVIDER", "deepseek").lower()
+        provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
         logger.info(f"Agno team initialized in coordinate mode using provider: {provider}.")
     except Exception as e:
         logger.critical(f"Failed to initialize Agno team during lifespan setup: {e}", exc_info=True)
@@ -796,7 +797,7 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
 
 def run():
     """Initializes and runs the MCP server in coordinate mode."""
-    selected_provider = os.environ.get("LLM_PROVIDER", "deepseek").lower()
+    selected_provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
     logger.info(f"Using provider: {selected_provider}")
     logger.info(f"Initializing Sequential Thinking Server (Coordinate Mode) with Provider: {selected_provider}...")
 
@@ -828,7 +829,7 @@ def run():
 
 def check_environment_variables():
     """Checks for necessary environment variables based on the selected provider."""
-    provider = os.environ.get("LLM_PROVIDER", "deepseek").lower()
+    provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
     api_key_var = ""
     base_url_var = "" # Some providers might not strictly need a base URL override
 
