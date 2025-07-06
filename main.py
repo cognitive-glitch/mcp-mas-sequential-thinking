@@ -2,12 +2,11 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Type, ClassVar
+from typing import AsyncIterator, Dict, List, Optional, Type, ClassVar
 
 from mcp.server.fastmcp import FastMCP
 from agno.agent import Agent
 from agno.models.base import Model
-from agno.models.deepseek import DeepSeek
 from agno.models.groq import Groq
 from agno.models.openrouter import OpenRouter
 from agno.team.team import Team
@@ -464,13 +463,7 @@ def create_sequential_thinking_team() -> Team:
             " - Formulate a final answer representing the combined effort.",
             "Remember: Orchestrate the team effectively and efficiently."
         ],
-        success_criteria=[
-            "Break down input thoughts into appropriate sub-tasks",
-            "Delegate sub-tasks efficiently to the most relevant specialists",
-            "Specialists execute delegated sub-tasks accurately",
-            "Synthesize specialist responses into a cohesive final output addressing the original thought",
-            "Identify and recommend necessary revisions or branches based on analysis"
-        ],
+        success_criteria="Break down input thoughts into appropriate sub-tasks, delegate efficiently to specialists, synthesize responses into cohesive output",
         enable_agentic_context=False, # Allows context sharing managed by the Team (coordinator)
         share_member_interactions=False, # Allows members' interactions to be shared
         markdown=True,
@@ -789,7 +782,7 @@ async def sequentialthinking(thought: str, thoughtNumber: int, totalThoughts: in
         # Return only the error message string
         return f"Input validation failed: {e}"
     except Exception as e:
-        logger.exception(f"Error processing tool call") # Log full traceback
+        logger.exception("Error processing tool call") # Log full traceback
         # Return only the error message string
         return f"An unexpected error occurred: {str(e)}"
 
@@ -831,7 +824,6 @@ def check_environment_variables():
     """Checks for necessary environment variables based on the selected provider."""
     provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
     api_key_var = ""
-    base_url_var = "" # Some providers might not strictly need a base URL override
 
     if provider == "deepseek":
         api_key_var = "DEEPSEEK_API_KEY"
@@ -845,7 +837,7 @@ def check_environment_variables():
         ModelClass, _, _ = get_model_config() # Just need the class for dummy init
         dummy_model = ModelClass(id="dummy-check") # Use a placeholder ID
         researcher_for_check = Agent(name="CheckAgent", tools=[ExaTools()], model=dummy_model)
-        uses_exa = any(isinstance(t, ExaTools) for t in researcher_for_check.tools)
+        uses_exa = any(isinstance(t, ExaTools) for t in (researcher_for_check.tools or []))
 
         if uses_exa and "EXA_API_KEY" not in os.environ:
              logger.warning("EXA_API_KEY environment variable not found, but ExaTools are configured in a team member. Researcher agent might fail.")
