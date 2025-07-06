@@ -3,7 +3,7 @@ name = "mcp-server-mas-sequential-thinking"
 version = "0.2.3"
 description = "MCP Agent Implementation for Sequential Thinking"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Frad LEE", email = "fradser@gmail.com" },
 ]
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-mcp-server-mas-sequential-thinking = "main:run"
+mcp-mas-sequential-thinking = "main:run"
 
 [build-system]
 requires = ["hatchling"]
