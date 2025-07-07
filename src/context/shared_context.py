@@ -94,8 +94,11 @@ class SharedContext:
             self.thought_graph.add_node(
                 thought_data.thoughtNumber,
                 thought=thought_data.thought,
+                thought_content=thought_data.thought,  # For backward compatibility with tests
                 confidence=thought_data.confidence_score,
                 timestamp=datetime.now(timezone.utc),
+                domain=thought_data.domain.value if thought_data.domain else None,
+                topic=thought_data.topic,
             )
 
             # Add relationships
@@ -108,9 +111,10 @@ class SharedContext:
 
             if thought_data.branchFromThought:
                 self.thought_graph.add_edge(
-                    thought_data.branchFromThought,
                     thought_data.thoughtNumber,
-                    relation_type="branches_to",
+                    thought_data.branchFromThought,
+                    relation_type="branches_from",
+                    branch_id=thought_data.branchId,
                 )
 
             for relation in thought_data.thought_relationships:
@@ -147,6 +151,7 @@ class SharedContext:
                 "related_insights": [],
                 "tool_patterns": [],
                 "graph_neighbors": [],
+                "keywords": [],
             }
 
             # Get recent thoughts from graph
@@ -192,6 +197,10 @@ class SharedContext:
                     tool_counts.items(), key=lambda x: x[1], reverse=True
                 )
             ]
+
+            # Extract keywords from thought
+            thought_words = set(thought.lower().split())
+            relevant["keywords"] = list(thought_words)[:10]  # Top 10 keywords
 
             return relevant
 

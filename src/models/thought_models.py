@@ -456,12 +456,13 @@ class ThoughtData(BaseModel):
     @field_serializer("keywords")
     def serialize_keywords(self, value: List[str]) -> List[str]:
         """Ensures keywords are properly formatted and deduplicated."""
-        # Remove duplicates while preserving order
+        # Remove duplicates while preserving order and case
         seen = set()
         unique_keywords = []
         for keyword in value:
-            if keyword.lower() not in seen:
-                seen.add(keyword.lower())
+            keyword_lower = keyword.lower()
+            if keyword_lower not in seen:
+                seen.add(keyword_lower)
                 unique_keywords.append(keyword.strip())
         return unique_keywords[:15]  # Limit to 15 keywords
 
@@ -558,11 +559,11 @@ class ThoughtData(BaseModel):
         """Validates and cleans keywords."""
         if len(v) > 20:  # Reasonable limit
             v = v[:20]
-        # Clean and normalize keywords
+        # Clean keywords while preserving case and allowing special characters
         cleaned = []
         for keyword in v:
             if keyword and isinstance(keyword, str):
-                clean_keyword = keyword.strip().lower()
+                clean_keyword = keyword.strip()
                 if clean_keyword and len(clean_keyword) <= 50:
                     cleaned.append(clean_keyword)
         return cleaned
@@ -914,11 +915,12 @@ class ProcessedThought(BaseModel):
                 self.success = False
 
         # Tool recommendations consistency
-        if (
-            self.tool_recommendations_generated
-            and self.thought_data.current_step is None
-        ):
-            self.tool_recommendations_generated = False
+        # Only validate if explicitly set to True and we have thought_data
+        if self.tool_recommendations_generated and hasattr(self, "thought_data"):
+            if self.thought_data and self.thought_data.current_step is None:
+                # Only change if there are no tool decisions either
+                if not self.thought_data.tool_decisions:
+                    self.tool_recommendations_generated = False
 
         # Reflection consistency
         if self.reflection_applied and not self.reflection_response:
