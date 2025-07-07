@@ -75,7 +75,7 @@ class TestSharedContextMemoryManagement:
         
         # Should keep top 3 by quality
         assert len(context.key_insights) == 3
-        qualities = [insight["quality"] for insight in context.key_insights]
+        qualities = [insight.confidence for insight in context.key_insights]
         assert all(q >= 0.8 for q in qualities)
     
     @pytest.mark.asyncio

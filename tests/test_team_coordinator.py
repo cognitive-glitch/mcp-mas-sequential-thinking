@@ -136,7 +136,7 @@ class TestTeamCoordinatorModelManagement:
         
         with patch('handlers.team_coordinator.LLMProviderFactory') as mock_factory:
             mock_config = Mock()
-            mock_config.validate.side_effect = ConfigurationError("Invalid config")
+            mock_config.validate.side_effect = ConfigurationError("provider", "Invalid config")
             mock_factory.get_provider_config.return_value = mock_config
             
             with pytest.raises(ModelInitializationError) as exc_info:
@@ -247,7 +247,8 @@ class TestTeamCoordinatorTeamCreation:
                 # Verify team configuration
                 team_kwargs = mock_team_class.call_args[1]
                 assert team_kwargs["name"] == "PrimaryThinkingTeam"
-                assert len(team_kwargs["members"]) == DEFAULT_MAX_AGENTS_PER_TEAM
+                # Should create 5 agents (the number of configs available)
+                assert len(team_kwargs["members"]) == 5
                 assert team_kwargs["model"] == mock_model
                 assert isinstance(team_kwargs["instructions"], list)
     
@@ -393,7 +394,7 @@ class TestTeamCoordinatorErrorHandling:
         
         with patch('handlers.team_coordinator.LLMProviderFactory') as mock_factory:
             mock_factory.get_provider_config.side_effect = ConfigurationError(
-                "Missing API key for provider"
+                "API_KEY", "Missing API key for provider"
             )
             
             with pytest.raises(ModelInitializationError) as exc_info:
