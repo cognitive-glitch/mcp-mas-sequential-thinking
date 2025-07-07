@@ -278,7 +278,7 @@ class ThoughtData(BaseModel):
 class ProcessedThought(BaseModel):
     """Enhanced result of processing a thought through the system."""
 
-    thought_data: "ThoughtData"
+    thought_data: ThoughtData
     coordinator_response: str
     reflection_response: Optional[str] = None
     integrated_response: str

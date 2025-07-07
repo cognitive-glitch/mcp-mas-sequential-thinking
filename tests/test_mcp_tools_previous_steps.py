@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from tools.mcp_tools import reflectivethinking
-from models.tool_models import StepRecommendation, ToolRecommendation
+from src.models.tool_models import StepRecommendation, ToolRecommendation
 
 
 # Mock app_context for all tests

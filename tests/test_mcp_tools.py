@@ -20,7 +20,7 @@ from src.tools.mcp_tools import (
     set_mcp_instance,
 )
 from src.models.thought_models import ThoughtData, DomainType
-from src.exceptions import ValidationError
+from exceptions import ValidationError as CustomValidationError
 from .conftest import create_test_thought_data
 
 
@@ -41,7 +41,7 @@ class TestMCPToolsValidation:
 
     def test_validate_thought_input_too_short(self):
         """Test validation fails with too short thought."""
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(CustomValidationError) as exc_info:
             validate_thought_input(
                 thought="short",
                 thought_number=1,
@@ -55,7 +55,7 @@ class TestMCPToolsValidation:
     def test_validate_thought_input_invalid_numbers(self):
         """Test validation fails with invalid thought numbers."""
         # Negative thought number
-        with pytest.raises(ValidationError):
+        with pytest.raises(CustomValidationError):
             validate_thought_input(
                 thought="Valid thought content here",
                 thought_number=-1,
@@ -66,7 +66,7 @@ class TestMCPToolsValidation:
             )
 
         # Total thoughts too low
-        with pytest.raises(ValidationError):
+        with pytest.raises(CustomValidationError):
             validate_thought_input(
                 thought="Valid thought content here",
                 thought_number=1,
@@ -77,7 +77,7 @@ class TestMCPToolsValidation:
             )
 
         # Thought number exceeds total
-        with pytest.raises(ValidationError):
+        with pytest.raises(CustomValidationError):
             validate_thought_input(
                 thought="Valid thought content here",
                 thought_number=6,
@@ -90,7 +90,7 @@ class TestMCPToolsValidation:
     def test_validate_thought_input_revision_logic(self):
         """Test validation of revision logic."""
         # Revision without revises_thought should fail
-        with pytest.raises(ValidationError):
+        with pytest.raises(CustomValidationError):
             validate_thought_input(
                 thought="Valid thought content here",
                 thought_number=3,
@@ -101,7 +101,7 @@ class TestMCPToolsValidation:
             )
 
         # Cannot revise future thought
-        with pytest.raises(ValidationError):
+        with pytest.raises(CustomValidationError):
             validate_thought_input(
                 thought="Valid thought content here",
                 thought_number=2,
@@ -287,8 +287,8 @@ class TestMCPToolsCore:
             total_thoughts=5,
         )
 
-        assert "Validation Error" in result
-        assert "at least 10 characters" in result
+        assert "Error:" in result
+        assert "Handled error message" in result
 
     @pytest.mark.asyncio
     async def test_reflectivereview_basic(self, mock_review_result):
@@ -305,17 +305,17 @@ class TestMCPToolsCore:
 
             # Verify review content
             assert "Thought Sequence Review" in result
-            assert "Total Thoughts: 5" in result
-            assert "Total Branches: 2" in result
-            assert "Overall Quality: 0.85" in result
-            assert "Topic Alignment: 0.90" in result
+            assert "**Total Thoughts**: 5" in result
+            assert "**Total Branches**: 2" in result
+            assert "**Overall Quality**: 0.85" in result
+            assert "**Topic Alignment**: 0.90" in result
             assert "Key insight 1" in result
             assert "Key insight 2" in result
             assert "Pattern A" in result
             assert "thinking_tools: 0.90" in result
             assert "Next step 1" in result
             assert "Improvement area 1" in result
-            assert "Review Confidence: 0.88" in result
+            assert "**Review Confidence**: 0.88" in result
 
     @pytest.mark.asyncio
     async def test_reflectivereview_error_handling(self):

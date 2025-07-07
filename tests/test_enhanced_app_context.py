@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from context.app_context import EnhancedAppContext
-from models.thought_models import DomainType
+from src.models.thought_models import DomainType
 from .conftest import create_test_thought_data
 
 
@@ -50,7 +50,9 @@ class TestEnhancedAppContextInitialization:
 
     def test_app_context_provider_initialization(self):
         """Test provider configuration during initialization."""
-        with patch("main.LLMProviderFactory.get_provider_config") as mock_provider:
+        with patch(
+            "providers.base.LLMProviderFactory.get_provider_config"
+        ) as mock_provider:
             mock_config = Mock()
             mock_config.provider_name = "TestProvider"
             mock_provider.return_value = mock_config
@@ -63,7 +65,9 @@ class TestEnhancedAppContextInitialization:
 
     def test_app_context_provider_initialization_failure(self):
         """Test handling of provider initialization failure."""
-        with patch("main.LLMProviderFactory.get_provider_config") as mock_provider:
+        with patch(
+            "providers.base.LLMProviderFactory.get_provider_config"
+        ) as mock_provider:
             mock_provider.side_effect = Exception("Provider init failed")
 
             with pytest.raises(Exception) as exc_info:
@@ -92,7 +96,7 @@ class TestEnhancedAppContextTeamManagement:
     def app_context_with_provider(self, mock_provider_config):
         """Create app context with mocked provider."""
         with patch(
-            "main.LLMProviderFactory.get_provider_config",
+            "providers.base.LLMProviderFactory.get_provider_config",
             return_value=mock_provider_config,
         ):
             context = EnhancedAppContext()
@@ -208,13 +212,13 @@ class TestEnhancedAppContextThoughtManagement:
     @pytest.fixture
     def app_context(self):
         """Create app context for testing."""
-        with patch("main.LLMProviderFactory.get_provider_config"):
+        with patch("providers.base.LLMProviderFactory.get_provider_config"):
             return EnhancedAppContext()
 
     @pytest.fixture
     def sample_thought(self):
         """Create sample thought data."""
-        from conftest import create_test_thought_data
+        from .conftest import create_test_thought_data
 
         return create_test_thought_data(
             thought="Analyze the requirements for a distributed system",
@@ -253,7 +257,7 @@ class TestEnhancedAppContextThoughtManagement:
     async def test_add_thought_with_branch(self, app_context):
         """Test adding a branched thought."""
         # Create thought with branch info (non-consecutive to avoid validation error)
-        from conftest import create_test_thought_data
+        from .conftest import create_test_thought_data
 
         branched_thought = create_test_thought_data(
             thought="Implement feature X with alternative approach exploring a different design pattern",
@@ -335,11 +339,12 @@ class TestEnhancedAppContextThoughtManagement:
         assert app_context.available_mcp_tools == new_tools
         assert app_context.available_tools == new_tools
 
-    def test_cleanup(self, app_context):
+    @pytest.mark.asyncio
+    async def test_cleanup(self, app_context):
         """Test cleanup of resources."""
-        app_context.shared_context.clear = Mock()
+        app_context.shared_context.clear = AsyncMock()
 
-        app_context.cleanup()
+        await app_context.cleanup()
 
         app_context.shared_context.clear.assert_called_once()
 
@@ -350,7 +355,7 @@ class TestEnhancedAppContextInstructionGeneration:
     @pytest.fixture
     def app_context(self):
         """Create app context for testing."""
-        with patch("main.LLMProviderFactory.get_provider_config"):
+        with patch("providers.base.LLMProviderFactory.get_provider_config"):
             return EnhancedAppContext()
 
     @pytest.mark.asyncio

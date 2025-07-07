@@ -25,10 +25,8 @@ from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
 # Enhanced local imports
-from models.thought_models import (
-    ThoughtData,
-    ProcessedThought,
-)
+from src.models.thought_models import ThoughtData
+from src.models.core_models import ProcessedThought
 from context.app_context import EnhancedAppContext
 
 # Import refactored modules

@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from handlers.team_coordinator import TeamCoordinator
-from models.protocols import ModelProtocol
+from src.models.protocols import ModelProtocol
 from exceptions import ModelInitializationError, ConfigurationError
 from config import DEFAULT_MAX_AGENTS_PER_TEAM, REFLECTIVE_LLM_PROVIDER
 

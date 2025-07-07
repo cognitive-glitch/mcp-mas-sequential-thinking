@@ -13,7 +13,7 @@ import time
 import logging
 from typing import Any, Dict, List, Optional
 
-from models.thought_models import (
+from src.models.thought_models import (
     ThoughtData,
     DomainType,
 )
@@ -156,7 +156,7 @@ async def reflectivethinking(
 
     try:
         # Import models needed for conversion
-        from models.thought_models import StepRecommendation, ToolRecommendation
+        from src.models.thought_models import StepRecommendation, ToolRecommendation
 
         # Convert current_step from dict to StepRecommendation if provided
         step_recommendation = None

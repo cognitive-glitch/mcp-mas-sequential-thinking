@@ -17,8 +17,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Test imports for integration
-from models.thought_models import ProcessedThought, DomainType
-from models.protocols import ModelProtocol
+from src.models.thought_models import ProcessedThought, DomainType
+from src.models.protocols import ModelProtocol
 from context.app_context import EnhancedAppContext
 
 # Import the main processing function
@@ -134,7 +134,7 @@ class TestFullThoughtProcessingPipeline:
 
             # If not first thought, add relationship to previous
             if i > 1:
-                from models.thought_models import ThoughtRelation
+                from src.models.thought_models import ThoughtRelation
 
                 thought_data.thought_relationships = [
                     ThoughtRelation(

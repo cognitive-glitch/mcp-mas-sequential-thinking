@@ -11,7 +11,7 @@ from agno.agent import Agent
 from agno.tools.exa import ExaTools
 from agno.tools.thinking import ThinkingTools
 
-from models.thought_models import ThoughtData, DomainType
+from src.models.thought_models import ThoughtData, DomainType
 from providers.base import LLMProviderFactory
 from team import AsyncTeam
 from context.shared_context import SharedContext

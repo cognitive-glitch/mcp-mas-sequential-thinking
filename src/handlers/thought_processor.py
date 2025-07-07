@@ -7,13 +7,13 @@ import time
 import logging
 from typing import Dict, Any, Optional, List
 
-from models.thought_models import (
+from src.models.thought_models import (
     ThoughtData,
     ProcessedThought,
     ThoughtSequenceReview,
     ReflectionFeedback,
 )
-from models.protocols import AppContextProtocol
+from src.models.protocols import AppContextProtocol
 
 # EnhancedAppContext will be properly typed with AppContextProtocol
 from exceptions import TeamProcessingError

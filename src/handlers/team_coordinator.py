@@ -5,7 +5,7 @@ Team coordination and initialization logic.
 import logging
 from typing import List, Optional, Dict, Any, cast
 from agno.agent import Agent
-from models.protocols import ModelProtocol
+from src.models.protocols import ModelProtocol
 
 from team import AsyncTeam
 from providers.base import LLMProviderFactory

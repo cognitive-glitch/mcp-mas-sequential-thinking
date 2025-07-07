@@ -20,7 +20,7 @@ class TestCoreModelsModule:
 
     def test_import_thought_data_from_core_models(self):
         """Test ThoughtData can be imported from core_models module."""
-        from models.core_models import DomainType
+        from src.models.core_models import DomainType
 
         # Should be able to create ThoughtData
         thought = create_test_thought_data(
@@ -35,7 +35,7 @@ class TestCoreModelsModule:
 
     def test_import_domain_type_enum(self):
         """Test DomainType enum is in core_models."""
-        from models.core_models import DomainType
+        from src.models.core_models import DomainType
 
         assert DomainType.GENERAL.value == "general"
         assert DomainType.TECHNICAL.value == "technical"
@@ -45,7 +45,7 @@ class TestCoreModelsModule:
 
     def test_import_thought_relation(self):
         """Test ThoughtRelation is in core_models."""
-        from models.core_models import ThoughtRelation
+        from src.models.core_models import ThoughtRelation
 
         relation = ThoughtRelation(
             from_thought=1,
@@ -60,7 +60,7 @@ class TestCoreModelsModule:
 
     def test_import_processed_thought(self):
         """Test ProcessedThought is in core_models."""
-        from models.core_models import ProcessedThought
+        from src.models.core_models import ProcessedThought
 
         # Create sample thought data
         thought_data = create_test_thought_data(
@@ -90,7 +90,7 @@ class TestAnalysisModelsModule:
 
     def test_import_reflection_feedback(self):
         """Test ReflectionFeedback is in analysis_models."""
-        from models.analysis_models import ReflectionFeedback
+        from src.models.analysis_models import ReflectionFeedback
 
         feedback = ReflectionFeedback(
             strengths=["Clear thinking"],
@@ -105,7 +105,7 @@ class TestAnalysisModelsModule:
 
     def test_import_branch_analysis(self):
         """Test BranchAnalysis is in analysis_models."""
-        from models.analysis_models import BranchAnalysis
+        from src.models.analysis_models import BranchAnalysis
 
         analysis = BranchAnalysis(
             branchId="branch1",
@@ -115,7 +115,7 @@ class TestAnalysisModelsModule:
             divergencePoint=2,
             convergencePoints=[4],
             effectiveness=0.75,
-            recommendation="Continue",
+            recommendation="continue",
         )
 
         assert analysis.branchId == "branch1"
@@ -123,7 +123,7 @@ class TestAnalysisModelsModule:
 
     def test_import_thought_sequence_review(self):
         """Test ThoughtSequenceReview is in analysis_models."""
-        from models.analysis_models import ThoughtSequenceReview
+        from src.models.analysis_models import ThoughtSequenceReview
 
         review = ThoughtSequenceReview(
             totalThoughts=10,
@@ -141,7 +141,7 @@ class TestAnalysisModelsModule:
 
     def test_import_quality_indicators(self):
         """Test QualityIndicators is in analysis_models."""
-        from models.analysis_models import QualityIndicators
+        from src.models.analysis_models import QualityIndicators
 
         indicators = QualityIndicators(
             clarity_score=0.9,
@@ -177,7 +177,7 @@ class TestToolModelsModule:
 
     def test_import_step_recommendation(self):
         """Test StepRecommendation is in tool_models."""
-        from models.tool_models import StepRecommendation
+        from src.models.tool_models import StepRecommendation
 
         step = StepRecommendation(
             step_description="Analyze the data",
@@ -206,7 +206,7 @@ class TestToolModelsModule:
 
     def test_import_tool_selection_result(self):
         """Test ToolSelectionResult is in tool_models."""
-        from models.tool_models import ToolSelectionResult
+        from src.models.tool_models import ToolSelectionResult
 
         # First create a tool recommendation
 
@@ -232,17 +232,17 @@ class TestBackwardCompatibility:
     def test_import_all_from_thought_models(self):
         """Test that all models can still be imported from thought_models."""
         # Core models
-        from models.thought_models import (
+        from src.models.thought_models import (
             ThoughtData,
         )
 
         # Analysis models
-        from models.thought_models import (
+        from src.models.thought_models import (
             ReflectionFeedback,
         )
 
         # Tool models
-        from models.thought_models import (
+        from src.models.thought_models import (
             ToolRecommendation,
         )
 
@@ -253,16 +253,16 @@ class TestBackwardCompatibility:
 
     def test_models_are_same_objects(self):
         """Test that models imported from different modules are the same objects."""
-        from models.thought_models import ThoughtData as ThoughtData1
-        from models.core_models import ThoughtData as ThoughtData2
+        from src.models.thought_models import ThoughtData as ThoughtData1
+        from src.models.core_models import ThoughtData as ThoughtData2
 
         # Should be the exact same class
         assert ThoughtData1 is ThoughtData2
 
     def test_cross_module_relationships(self):
         """Test that models from different modules can work together."""
-        from models.analysis_models import ReflectionFeedback
-        from models.tool_models import StepRecommendation
+        from src.models.analysis_models import ReflectionFeedback
+        from src.models.tool_models import StepRecommendation
 
         # Create a thought with tool recommendations
         tool_rec = create_test_tool_recommendation(
