@@ -246,7 +246,7 @@ class SharedContext:
             if len(self.key_insights) > self.max_insights:
                 # Sort by confidence (quality) and keep top N
                 self.key_insights.sort(key=lambda x: x.confidence, reverse=True)
-                self.key_insights = self.key_insights[:self.max_insights]
+                self.key_insights = self.key_insights[: self.max_insights]
                 logger.debug(f"Trimmed insights to top {self.max_insights} by quality")
 
             self.last_updated = datetime.now(timezone.utc)
@@ -274,32 +274,36 @@ class SharedContext:
                         "min": min(values),
                         "max": max(values),
                         "count": len(values),
-                        "median": sorted(values)[len(values) // 2] if values else 0
+                        "median": sorted(values)[len(values) // 2] if values else 0,
                     }
             return summary
-    
+
     def get_tool_usage_patterns(self) -> Dict[str, Dict[str, Any]]:
         """Analyzes tool usage patterns from history."""
         patterns = {}
-        
+
         # Group by tool name
         tool_groups = defaultdict(list)
         for decision in self.tool_usage_history:
             tool_groups[decision.tool_name].append(decision)
-        
+
         # Calculate patterns for each tool
         for tool_name, decisions in tool_groups.items():
             confidences = [d.confidence for d in decisions]
             patterns[tool_name] = {
                 "count": len(decisions),
-                "avg_confidence": sum(confidences) / len(confidences) if confidences else 0,
-                "success_rate": sum(1 for d in decisions if d.outcome == "Success") / len(decisions) if decisions else 0,
-                "alternatives": list(set(
-                    alt for d in decisions 
-                    for alt in d.alternatives_considered
-                ))
+                "avg_confidence": sum(confidences) / len(confidences)
+                if confidences
+                else 0,
+                "success_rate": sum(1 for d in decisions if d.outcome == "Success")
+                / len(decisions)
+                if decisions
+                else 0,
+                "alternatives": list(
+                    set(alt for d in decisions for alt in d.alternatives_considered)
+                ),
             }
-        
+
         return patterns
 
     async def get_thought_path(
@@ -329,7 +333,9 @@ class SharedContext:
             "performance_metrics": sum(
                 len(values) for values in self.performance_metrics.values()
             ),
-            "total_items": len(self.memory_store) + len(self.key_insights) + self.thought_graph.number_of_nodes()
+            "total_items": len(self.memory_store)
+            + len(self.key_insights)
+            + self.thought_graph.number_of_nodes(),
         }
 
     async def clear(self) -> None:

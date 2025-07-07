@@ -15,45 +15,29 @@ Key Features:
 """
 
 import time
-import asyncio
 import logging
 import json
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
-from datetime import datetime
-from enum import Enum
-from dataclasses import dataclass, field
 from pathlib import Path
 
 # Core frameworks
 from mcp.server.fastmcp import FastMCP
-from agno.agent import Agent
-from agno.tools.exa import ExaTools
-from agno.tools.thinking import ThinkingTools
 from dotenv import load_dotenv
-from pydantic import ValidationError
 
 # Enhanced local imports
 from models.thought_models import (
     ThoughtData,
     ProcessedThought,
-    ThoughtSequenceReview,
-    DomainType,
-    BranchAnalysis,
 )
-from providers.base import LLMProviderFactory
-from context.shared_context import SharedContext
 from context.app_context import EnhancedAppContext
 
 # Import refactored modules
 from team import AsyncTeam as RefactoredAsyncTeam
-from handlers import generate_sequence_review
 from tools import (
     set_app_context,
     set_mcp_instance,
 )
 from exceptions import ErrorType
-from error_handling import CircuitBreaker, ErrorContext, ErrorSeverity, EnhancedErrorHandler
 from config import LOG_LEVEL
 
 import logging.handlers
@@ -108,7 +92,6 @@ AsyncTeam = RefactoredAsyncTeam
 
 
 # Error handling classes have been extracted to error_handling module
-
 
 
 # Global app context
@@ -326,157 +309,6 @@ Based on both analyses, the recommended approach is to proceed with the insights
         )
 
 
-async def generate_sequence_review(
-    context: EnhancedAppContext,
-) -> ThoughtSequenceReview:
-    """Generate a comprehensive review of the thought sequence."""
-    try:
-        # Gather all thoughts
-        all_thoughts = context.thought_history
-
-        # Analyze branches
-        branch_analyses = []
-        for branch_id, branch_thoughts in context.branches.items():
-            if branch_thoughts:
-                quality_scores = [t.confidence_score for t in branch_thoughts]
-                avg_quality = (
-                    sum(quality_scores) / len(quality_scores) if quality_scores else 0.5
-                )
-
-                branch_analysis = BranchAnalysis(
-                    branch_id=branch_id,
-                    branch_quality=avg_quality,
-                    thought_count=len(branch_thoughts),
-                    key_insights=[t.thought[:100] for t in branch_thoughts[:3]],
-                    completion_status="completed"
-                    if not branch_thoughts[-1].nextThoughtNeeded
-                    else "ongoing",
-                    recommendation="Continue development"
-                    if avg_quality > 0.7
-                    else "Consider revision",
-                )
-                branch_analyses.append(branch_analysis)
-
-        # Calculate overall metrics
-        total_thoughts = len(all_thoughts)
-        overall_quality = (
-            sum(t.confidence_score for t in all_thoughts) / total_thoughts
-            if total_thoughts > 0
-            else 0.5
-        )
-
-        # Extract key insights
-        key_insights = []
-        insights = await asyncio.gather(
-            *[
-                context.shared_context.get_context(f"insight_{i}")
-                for i in range(min(5, total_thoughts))
-            ]
-        )
-        key_insights = [ins for ins in insights if ins]
-
-        # Identify patterns
-        patterns = []
-        if total_thoughts > 3:
-            # Look for revision patterns
-            revision_count = sum(1 for t in all_thoughts if t.isRevision)
-            if revision_count > total_thoughts * 0.3:
-                patterns.append("High revision rate - iterative refinement approach")
-
-            # Look for branching patterns
-            if len(context.branches) > 1:
-                patterns.append(
-                    f"Multiple exploration paths ({len(context.branches)} branches)"
-                )
-
-        # Tool effectiveness
-        tool_stats = {}  # Tool statistics removed (was in ToolSelector)
-        tool_effectiveness = {
-            name: stats.get("avg_effectiveness", 0.5)
-            for name, stats in tool_stats.items()
-        }
-
-        # Performance metrics (might be used in future enhancements)
-        _ = await context.get_performance_metrics()
-
-        # Determine best branch
-        best_branch = None
-        if branch_analyses:
-            best_branch = max(branch_analyses, key=lambda b: b.branch_quality).branch_id
-
-        # Generate next steps
-        next_steps = []
-        if all_thoughts and all_thoughts[-1].nextThoughtNeeded:
-            next_steps.append("Continue with the next thought in the sequence")
-
-        if any(b.completion_status == "ongoing" for b in branch_analyses):
-            next_steps.append("Complete ongoing branches")
-
-        if overall_quality < 0.6:
-            next_steps.append("Consider revising low-confidence thoughts")
-
-        # Areas for improvement
-        areas_for_improvement = []
-        error_summary = context.error_handler.get_error_summary()
-        if error_summary["total_errors"] > 5:
-            areas_for_improvement.append("Reduce error rate through input validation")
-
-        if tool_effectiveness and min(tool_effectiveness.values()) < 0.5:
-            areas_for_improvement.append("Improve tool selection accuracy")
-
-        # Calculate topic alignment
-        topic_alignment = 0.8  # Default
-        if all_thoughts:
-            topics = [t.topic for t in all_thoughts if t.topic]
-            if topics:
-                # Check topic consistency
-                unique_topics = set(topics)
-                topic_alignment = 1.0 - (len(unique_topics) - 1) / len(topics)
-
-        return ThoughtSequenceReview(
-            total_thoughts=total_thoughts,
-            total_branches=len(context.branches),
-            overall_quality=overall_quality,
-            key_insights=key_insights[:5],
-            patterns_identified=patterns,
-            quality_trends={
-                "start": all_thoughts[0].confidence_score if all_thoughts else 0.5,
-                "middle": all_thoughts[total_thoughts // 2].confidence_score
-                if total_thoughts > 1
-                else 0.5,
-                "end": all_thoughts[-1].confidence_score if all_thoughts else 0.5,
-            },
-            tool_effectiveness=tool_effectiveness,
-            branch_analyses=branch_analyses,
-            best_branch=best_branch,
-            next_steps=next_steps,
-            areas_for_improvement=areas_for_improvement,
-            topic_alignment_score=topic_alignment,
-            review_timestamp=int(time.time() * 1000),
-            review_confidence=0.9 if total_thoughts > 5 else 0.7,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to generate sequence review: {e}")
-        # Return minimal review on error
-        return ThoughtSequenceReview(
-            total_thoughts=len(context.thought_history),
-            total_branches=len(context.branches),
-            overall_quality=0.5,
-            key_insights=["Review generation failed"],
-            patterns_identified=[],
-            quality_trends={},
-            tool_effectiveness={},
-            branch_analyses=[],
-            best_branch=None,
-            next_steps=["Retry review generation"],
-            areas_for_improvement=["Fix review generation errors"],
-            topic_alignment_score=0.5,
-            review_timestamp=int(time.time() * 1000),
-            review_confidence=0.1,
-        )
-
-
 @asynccontextmanager
 async def lifespan(app):
     """Lifecycle manager for the MCP server."""
@@ -494,7 +326,7 @@ async def lifespan(app):
 
     # Cleanup
     logger.info("Shutting down Reflective Thinking MCP Server...")
-    app_context.cleanup()
+    await app_context.cleanup()
 
 
 def run():

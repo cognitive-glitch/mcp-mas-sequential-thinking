@@ -13,13 +13,14 @@ import time
 import logging
 from typing import Any, Dict, List, Optional
 
-# MCP instance will be injected at runtime
-mcp = None
 from models.thought_models import (
     ThoughtData,
     DomainType,
 )
 from exceptions import ValidationError, ErrorType
+
+# MCP instance will be injected at runtime
+mcp = None
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +116,10 @@ async def generate_sequence_review(
 ) -> Any:
     """Generate a comprehensive review of thought sequences."""
     # Import here to avoid circular imports
-    from handlers.thought_processor import ThoughtProcessor
 
-    processor = ThoughtProcessor(context)
-    return await processor.generate_review(branch_id, min_quality_threshold)
+    from handlers.thought_processor import generate_sequence_review
+
+    return await generate_sequence_review(context, branch_id, min_quality_threshold)
 
 
 # =============================================================================
@@ -181,6 +182,7 @@ async def reflectivethinking(
                 recommended_tools=tool_recs,
                 expected_outcome=current_step["expected_outcome"],
                 next_step_conditions=current_step.get("next_step_conditions", []),
+                estimated_complexity=current_step.get("estimated_complexity", 0.5),
             )
 
         # Convert previous_steps from list of dicts to list of StepRecommendation objects
@@ -203,7 +205,7 @@ async def reflectivethinking(
                                 limitations=tool.get("limitations", []),
                             )
                         )
-                    
+
                     # Create StepRecommendation object
                     prev_step_obj = StepRecommendation(
                         step_description=step_dict["step_description"],
@@ -214,9 +216,11 @@ async def reflectivethinking(
                         dependencies=step_dict.get("dependencies", []),
                     )
                     converted_previous_steps.append(prev_step_obj)
-                    
+
                 except Exception as e:
-                    logger.warning(f"Failed to convert previous step: {e}. Skipping invalid step.")
+                    logger.warning(
+                        f"Failed to convert previous step: {e}. Skipping invalid step."
+                    )
                     # Continue processing other valid steps
 
         # Create ThoughtData from parameters (only valid fields)
@@ -234,6 +238,7 @@ async def reflectivethinking(
             previous_steps=converted_previous_steps,
             # Valid ThoughtData fields only
             domain=DomainType.GENERAL,
+            quality_indicators=None,
             keywords=[],
             confidence_score=0.5,
             timestamp_ms=int(time.time() * 1000),
@@ -266,7 +271,7 @@ async def reflectivethinking(
                     )
 
         # Add performance metrics if this is a final thought
-        if not next_thought_needed:
+        if not next_thought_needed and app_context:
             metrics = await app_context.get_performance_metrics()
             response_parts.append(
                 f"\n## Summary\n"
@@ -278,15 +283,23 @@ async def reflectivethinking(
         return "\n".join(response_parts)
 
     except ValidationError as e:
-        error_msg = app_context.error_handler.handle_error(
-            e, ErrorType.VALIDATION_ERROR, thought_number
+        error_msg = (
+            app_context.error_handler.handle_error(
+                e, ErrorType.VALIDATION_ERROR, thought_number
+            )
+            if app_context and app_context.error_handler
+            else str(e)
         )
         logger.error(f"Validation error: {e}")
         return f"Validation Error: {error_msg}\n\nDetails: {str(e)}"
 
     except Exception as e:
-        error_msg = app_context.error_handler.handle_error(
-            e, ErrorType.TEAM_PROCESSING, thought_number
+        error_msg = (
+            app_context.error_handler.handle_error(
+                e, ErrorType.TEAM_PROCESSING, thought_number
+            )
+            if app_context and app_context.error_handler
+            else str(e)
         )
         logger.error(f"Unexpected error: {e}")
         return f"Error: {error_msg}\n\nPlease try again with a simpler thought."

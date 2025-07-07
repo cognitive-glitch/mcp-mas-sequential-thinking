@@ -77,7 +77,6 @@ class TestSharedContextAdvanced:
                 thoughtNumber=i,
                 totalThoughts=6,
                 nextThoughtNeeded=(i < 6),
-                session_context=mock_session_context,
             )
             thoughts.append(thought)
             await context.update_from_thought(thought)
@@ -85,22 +84,46 @@ class TestSharedContextAdvanced:
         # Add explicit relationships
         thought_relations = [
             ThoughtRelation(
-                from_thought=1, to_thought=2, relation_type="leads_to", strength=0.9
+                from_thought=1,
+                to_thought=2,
+                relation_type="leads_to",
+                strength=0.9,
+                description="Sequential progression",
             ),
             ThoughtRelation(
-                from_thought=2, to_thought=3, relation_type="leads_to", strength=0.8
+                from_thought=2,
+                to_thought=3,
+                relation_type="leads_to",
+                strength=0.8,
+                description="Logical follow-up",
             ),
             ThoughtRelation(
-                from_thought=1, to_thought=4, relation_type="leads_to", strength=0.7
+                from_thought=1,
+                to_thought=4,
+                relation_type="leads_to",
+                strength=0.7,
+                description="Parallel exploration",
             ),
             ThoughtRelation(
-                from_thought=4, to_thought=5, relation_type="leads_to", strength=0.8
+                from_thought=4,
+                to_thought=5,
+                relation_type="leads_to",
+                strength=0.8,
+                description="Continuation",
             ),
             ThoughtRelation(
-                from_thought=3, to_thought=6, relation_type="leads_to", strength=0.9
+                from_thought=3,
+                to_thought=6,
+                relation_type="leads_to",
+                strength=0.9,
+                description="Final synthesis",
             ),
             ThoughtRelation(
-                from_thought=5, to_thought=6, relation_type="leads_to", strength=0.8
+                from_thought=5,
+                to_thought=6,
+                relation_type="leads_to",
+                strength=0.8,
+                description="Convergence",
             ),
         ]
 
@@ -148,7 +171,6 @@ class TestSharedContextAdvanced:
                 thought=thought_text,
                 thoughtNumber=i + 1,
                 keywords=keywords,
-                session_context=mock_session_context,
             )
             await context.update_from_thought(thought)
 
@@ -231,7 +253,6 @@ class TestSharedContextAdvanced:
         thought1 = create_test_thought_data(
             thought="Initial approach",
             thoughtNumber=1,
-            session_context=mock_session_context,
         )
         await context.update_from_thought(thought1)
 
@@ -242,7 +263,6 @@ class TestSharedContextAdvanced:
                 thoughtNumber=i,
                 isRevision=True,
                 revisesThought=i - 1,
-                session_context=mock_session_context,
             )
             await context.update_from_thought(thought)
 
@@ -266,14 +286,12 @@ class TestSharedContextAdvanced:
 
         thought1 = create_test_thought_data(
             thoughtNumber=1,
-            session_context=mock_session_context,
         )
         await context.update_from_thought(thought1)
 
         # Continue linearly to thought 2
         thought2 = create_test_thought_data(
             thoughtNumber=2,
-            session_context=mock_session_context,
         )
         await context.update_from_thought(thought2)
 
@@ -282,7 +300,6 @@ class TestSharedContextAdvanced:
             thoughtNumber=3,
             branchFromThought=1,
             branchId="approach-a",
-            session_context=mock_session_context,
         )
         await context.update_from_thought(thought3)
 
@@ -291,26 +308,26 @@ class TestSharedContextAdvanced:
             thoughtNumber=4,
             branchFromThought=1,
             branchId="approach-b",
-            session_context=mock_session_context,
         )
         await context.update_from_thought(thought4)
 
         # Merge point
         thought5 = create_test_thought_data(
             thoughtNumber=5,
-            session_context=mock_session_context,
             thought_relationships=[
                 ThoughtRelation(
                     from_thought=3,
                     to_thought=5,
                     relation_type="merges_to",
                     strength=0.8,
+                    description="Branch merge",
                 ),
                 ThoughtRelation(
                     from_thought=4,
                     to_thought=5,
                     relation_type="merges_to",
                     strength=0.7,
+                    description="Alternative path merge",
                 ),
             ],
         )
@@ -344,12 +361,13 @@ class TestSharedContextAdvanced:
                 confidence=confidence,
                 outcome=outcome,
                 execution_time_ms=time_ms,
+                success=True,
+                error_message=None,
             )
 
             thought = create_test_thought_data(
                 thoughtNumber=i + 1,
                 tool_decisions=[decision],
-                session_context=mock_session_context,
             )
             await context.update_from_thought(thought)
 
@@ -384,6 +402,8 @@ class TestSharedContextAdvanced:
                 confidence=0.8,
                 outcome="Test outcome",
                 execution_time_ms=1000,
+                success=True,
+                error_message=None,
             )
             context.tool_usage_history.append(decision)
 
@@ -412,11 +432,13 @@ class TestSharedContextAdvanced:
                 confidence=0.8,
                 outcome="Test outcome",
                 execution_time_ms=1000,
+                success=True,
+                error_message=None,
             )
         )
 
         # Clear context
-        context.clear()
+        await context.clear()
 
         # Verify everything is cleared
         assert len(context.memory_store) == 0

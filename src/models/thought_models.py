@@ -20,7 +20,7 @@ from .analysis_models import (
     ThoughtSequenceReview,
 )
 
-# Tool models - tool recommendations and decisions  
+# Tool models - tool recommendations and decisions
 from .tool_models import (
     ToolRecommendation,
     StepRecommendation,
@@ -31,33 +31,33 @@ from .tool_models import (
 # Legacy PriorityLevel enum for compatibility (can be deprecated later)
 from enum import Enum
 
+
 class PriorityLevel(str, Enum):
     """Priority levels for tool recommendations."""
+
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
+
 # Export all models for backward compatibility
 __all__ = [
     # Core models
     "DomainType",
-    "ThoughtRelation", 
+    "ThoughtRelation",
     "ThoughtData",
     "ProcessedThought",
-    
     # Analysis models
     "ReflectionFeedback",
     "QualityIndicators",
-    "BranchAnalysis", 
+    "BranchAnalysis",
     "ThoughtSequenceReview",
-    
     # Tool models
     "ToolRecommendation",
-    "StepRecommendation", 
+    "StepRecommendation",
     "ToolDecision",
     "ToolSelectionResult",
-    
     # Legacy
     "PriorityLevel",
 ]

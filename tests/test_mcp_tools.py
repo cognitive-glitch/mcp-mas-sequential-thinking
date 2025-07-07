@@ -21,6 +21,7 @@ from src.tools.mcp_tools import (
 )
 from src.models.thought_models import ThoughtData, DomainType
 from src.exceptions import ValidationError
+from .conftest import create_test_thought_data
 
 
 class TestMCPToolsValidation:
@@ -226,7 +227,7 @@ class TestMCPToolsCore:
             mock_process.return_value = processed_result
             set_app_context(context)
 
-            result = await reflectivethinking(
+            await reflectivethinking(
                 thought="Deep dive into performance analysis",
                 next_thought_needed=True,
                 thought_number=2,
@@ -461,8 +462,8 @@ class TestMCPToolsUtilities:
         # Test that the function correctly imports and delegates to ThoughtProcessor
         # This is a unit test of the interface layer only
 
-        mock_context = Mock()
-        thought_data = ThoughtData(
+        Mock()
+        create_test_thought_data(
             thought="Interface test thought that meets minimum length requirements",
             thoughtNumber=1,
             totalThoughts=5,
@@ -489,7 +490,7 @@ class TestMCPToolsUtilities:
         # Test that the function correctly imports and delegates
         # This is a unit test of the interface layer only
 
-        mock_context = Mock()
+        Mock()
 
         # Test that the function exists and can be called
         assert callable(generate_sequence_review)

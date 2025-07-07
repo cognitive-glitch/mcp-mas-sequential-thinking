@@ -19,7 +19,7 @@ os.environ["OPENAI_API_KEY"] = "test-key-for-basic-test"
 async def test_basic_mcp():
     """Test basic MCP functionality without complex setup."""
     try:
-        from main import reflectivethinking
+        from tools.mcp_tools import reflectivethinking
 
         # Simple test with new function signature
         print("Testing basic reflectivethinking...")

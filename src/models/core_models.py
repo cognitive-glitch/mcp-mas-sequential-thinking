@@ -12,11 +12,9 @@ from pydantic import (
     model_validator,
     computed_field,
     field_serializer,
-    ValidationInfo,
 )
 from enum import Enum
 import time
-import hashlib
 import re
 
 
@@ -39,7 +37,8 @@ class ThoughtRelation(BaseModel):
     from_thought: int = Field(..., description="Source thought number")
     to_thought: int = Field(..., description="Target thought number")
     relation_type: str = Field(
-        ..., description="Type of relation (e.g., 'leads_to', 'contradicts', 'supports')"
+        ...,
+        description="Type of relation (e.g., 'leads_to', 'contradicts', 'supports')",
     )
     strength: float = Field(
         0.5, ge=0.0, le=1.0, description="Strength of the relationship"
@@ -82,28 +81,54 @@ class ThoughtData(BaseModel):
     nextThoughtNeeded: bool = Field(..., description="Whether more thoughts are needed")
 
     # Optional metadata fields
-    isRevision: bool = Field(False, description="Whether this revises a previous thought")
-    revisesThought: Optional[int] = Field(None, description="Which thought is being revised")
+    isRevision: bool = Field(
+        False, description="Whether this revises a previous thought"
+    )
+    revisesThought: Optional[int] = Field(
+        None, description="Which thought is being revised"
+    )
     branchId: Optional[str] = Field(None, description="Branch identifier if branching")
-    branchFromThought: Optional[int] = Field(None, description="Source thought for branch")
-    needsMoreThoughts: bool = Field(False, description="Indicates need for extended thinking")
-    confidence_score: float = Field(0.7, ge=0.0, le=1.0, description="Confidence in this thought")
+    branchFromThought: Optional[int] = Field(
+        None, description="Source thought for branch"
+    )
+    needsMoreThoughts: bool = Field(
+        False, description="Indicates need for extended thinking"
+    )
+    confidence_score: float = Field(
+        0.7, ge=0.0, le=1.0, description="Confidence in this thought"
+    )
 
     # Enhanced fields for topic alignment and tool selection
-    topic: Optional[str] = Field(None, description="Current topic or subject being explored")
-    subject: Optional[str] = Field(None, description="Specific subject area (legacy, use topic)")
+    topic: Optional[str] = Field(
+        None, description="Current topic or subject being explored"
+    )
+    subject: Optional[str] = Field(
+        None, description="Specific subject area (legacy, use topic)"
+    )
     domain: DomainType = Field(DomainType.GENERAL, description="Domain classification")
-    keywords: List[str] = Field(default_factory=list, description="Key terms in this thought")
-    entities: List[str] = Field(default_factory=list, description="Named entities mentioned")
-    concepts: List[str] = Field(default_factory=list, description="Abstract concepts discussed")
+    keywords: List[str] = Field(
+        default_factory=list, description="Key terms in this thought"
+    )
+    entities: List[str] = Field(
+        default_factory=list, description="Named entities mentioned"
+    )
+    concepts: List[str] = Field(
+        default_factory=list, description="Abstract concepts discussed"
+    )
 
     # Tool recommendation fields (moved to separate models but kept reference)
     current_step: Optional[Any] = Field(None, description="Current step recommendation")
-    previous_steps: List[Any] = Field(default_factory=list, description="History of previous steps")
-    tool_decisions: List[Any] = Field(default_factory=list, description="Tool selection decisions")
+    previous_steps: List[Any] = Field(
+        default_factory=list, description="History of previous steps"
+    )
+    tool_decisions: List[Any] = Field(
+        default_factory=list, description="Tool selection decisions"
+    )
 
     # Reflection and quality fields
-    reflection_feedback: Optional[Any] = Field(None, description="Feedback from reflection team")
+    reflection_feedback: Optional[Any] = Field(
+        None, description="Feedback from reflection team"
+    )
     quality_indicators: Optional[Any] = Field(None, description="Quality metrics")
 
     # Relationships
@@ -129,7 +154,9 @@ class ThoughtData(BaseModel):
     def validate_thought_content(cls, v: str) -> str:
         """Ensure thought has meaningful content."""
         if len(v.strip()) < cls.MIN_THOUGHT_LENGTH:
-            raise ValueError(f"Thought content must be at least {cls.MIN_THOUGHT_LENGTH} characters long")
+            raise ValueError(
+                f"Thought content must be at least {cls.MIN_THOUGHT_LENGTH} characters long"
+            )
         return v.strip()
 
     @field_validator("keywords", "entities", "concepts")
@@ -198,7 +225,9 @@ class ThoughtData(BaseModel):
             for word in words:
                 word_freq[word] = word_freq.get(word, 0) + 1
             # Get top 5 most frequent meaningful words
-            self.keywords = sorted(word_freq.keys(), key=lambda x: word_freq[x], reverse=True)[:5]
+            self.keywords = sorted(
+                word_freq.keys(), key=lambda x: word_freq[x], reverse=True
+            )[:5]
 
         # Sync subject and topic for backward compatibility
         if self.subject and not self.topic:
@@ -237,7 +266,9 @@ class ThoughtData(BaseModel):
         """Returns a concise representation for logging/display."""
         return {
             "number": self.thoughtNumber,
-            "content": self.thought[:100] + "..." if len(self.thought) > 100 else self.thought,
+            "content": self.thought[:100] + "..."
+            if len(self.thought) > 100
+            else self.thought,
             "complete": self.is_complete,
             "confidence": self.confidence_score,
             "domain": self.domain.value,
@@ -307,9 +338,9 @@ class ProcessedThought(BaseModel):
         if self.context_updated:
             factors.append(0.7)
 
-        # Thought data quality
-        if hasattr(self.thought_data, "overall_quality_estimate"):
-            factors.append(self.thought_data.overall_quality_estimate)
+        # Thought data quality (use confidence score as proxy)
+        if hasattr(self.thought_data, "confidence_score"):
+            factors.append(self.thought_data.confidence_score)
 
         return sum(factors) / len(factors) if factors else 0.5
 

@@ -7,8 +7,7 @@ import asyncio
 import networkx as nx
 
 from src.context.shared_context import SharedContext, Insight
-from src.models.thought_models import ToolDecision
-from .conftest import create_test_thought_data
+from .conftest import create_test_thought_data, create_test_tool_decision
 
 
 class TestSharedContext:
@@ -386,7 +385,7 @@ class TestSharedContext:
         context = SharedContext()
 
         # Create thought with tool decisions
-        tool_decision = ToolDecision(
+        tool_decision = create_test_tool_decision(
             tool_name="code_analyzer",
             rationale="Need to analyze code complexity",
             alternatives_considered=["profiler", "benchmark"],

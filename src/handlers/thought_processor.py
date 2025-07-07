@@ -77,23 +77,27 @@ class ThoughtProcessor:
 
             # Create processed thought
             return ProcessedThought(
-                thoughtNumber=thought_data.thoughtNumber,
-                content=thought_data.thought,
-                processingTime=processing_time,
-                confidence=thought_data.confidence_score,
-                keyInsights=self._extract_key_insights(
+                thought_data=thought_data,
+                coordinator_response=primary_response
+                or "Primary team processing completed",
+                reflection_response=reflection_response,
+                integrated_response=self._create_integrated_response(
                     primary_response, reflection_response
                 ),
-                suggestedActions=self._extract_suggested_actions(primary_response),
-                toolRecommendations=self._extract_tool_recommendations(thought_data),
-                reflectionSummary=self._create_reflection_summary(reflection_feedback),
+                next_step_guidance=self._create_next_step_guidance(
+                    thought_data, primary_response
+                ),
+                execution_time_ms=processing_time,
+                success=True,
+                tool_recommendations_generated=bool(thought_data.current_step),
+                reflection_applied=bool(reflection_response),
+                context_updated=True,
             )
 
         except Exception as e:
             logger.error(
                 "Thought processing failed",
-                thought_number=thought_data.thoughtNumber,
-                error=str(e),
+                extra={"thought_number": thought_data.thoughtNumber, "error": str(e)},
             )
             raise TeamProcessingError(
                 team_name="thought_processor", reason=str(e), stage="processing"
@@ -163,7 +167,7 @@ class ThoughtProcessor:
             return response.content if hasattr(response, "content") else str(response)
 
         except Exception as e:
-            logger.warning("Reflection team processing failed", error=str(e))
+            logger.warning("Reflection team processing failed", extra={"error": str(e)})
             self.context.error_handler.circuit_breakers[
                 "team_processing"
             ].record_failure()
@@ -289,6 +293,50 @@ Please provide meta-analysis of:
             f"Suggestions: {len(reflection_feedback.suggestions)}"
         )
 
+    def _create_integrated_response(
+        self, primary_response: str, reflection_response: Optional[str]
+    ) -> str:
+        """Create integrated response from primary and reflection team outputs."""
+        if not primary_response:
+            return "No analysis available"
+
+        integrated = primary_response
+
+        if reflection_response:
+            integrated += f"\n\n### Reflection Analysis\n{reflection_response}"
+
+        return integrated
+
+    def _create_next_step_guidance(
+        self, thought_data: ThoughtData, primary_response: str
+    ) -> str:
+        """Create next step guidance based on thought and analysis."""
+        guidance_parts = []
+
+        # Check if sequence is complete
+        if not thought_data.nextThoughtNeeded:
+            guidance_parts.append("This thought sequence is complete.")
+        else:
+            guidance_parts.append(
+                f"Continue to thought {thought_data.thoughtNumber + 1} of {thought_data.totalThoughts}."
+            )
+
+        # Add tool recommendations if available
+        if thought_data.current_step:
+            guidance_parts.append(
+                "Follow the recommended tool usage for optimal results."
+            )
+
+        # Extract guidance from primary response
+        if "next step" in primary_response.lower():
+            guidance_parts.append("Consider the next steps outlined in the analysis.")
+
+        return (
+            " ".join(guidance_parts)
+            if guidance_parts
+            else "Continue with the analysis."
+        )
+
 
 async def generate_sequence_review(
     context: AppContextProtocol,
@@ -365,7 +413,7 @@ async def generate_sequence_review(
         )
 
     except Exception as e:
-        logger.error("Failed to generate sequence review", error=str(e))
+        logger.error("Failed to generate sequence review", extra={"error": str(e)})
         return ThoughtSequenceReview(
             totalThoughts=0,
             branches=[],

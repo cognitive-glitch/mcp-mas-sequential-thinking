@@ -12,7 +12,6 @@ from agno.tools.exa import ExaTools
 from agno.tools.thinking import ThinkingTools
 
 from models.thought_models import ThoughtData, DomainType
-from models.protocols import ModelProtocol
 from providers.base import LLMProviderFactory
 from team import AsyncTeam
 from context.shared_context import SharedContext
@@ -429,7 +428,7 @@ class EnhancedAppContext:
         self.available_tools = tools
         logger.info(f"Updated available tools: {tools}")
 
-    def cleanup(self):
+    async def cleanup(self):
         """Cleanup resources."""
-        self.shared_context.clear()
+        await self.shared_context.clear()
         logger.info("Enhanced app context cleaned up")

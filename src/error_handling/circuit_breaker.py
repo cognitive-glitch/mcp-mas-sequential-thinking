@@ -47,13 +47,15 @@ class CircuitBreaker:
         """Check if operation can proceed."""
         if not self.is_open and not self.is_half_open:
             return True
-        
+
         if self.is_half_open:
             return True  # Allow requests in half-open state
 
         # Check if recovery timeout has passed (transition from open to half-open)
         if self.last_failure_time:
-            time_since_failure = (datetime.now() - self.last_failure_time).total_seconds()
+            time_since_failure = (
+                datetime.now() - self.last_failure_time
+            ).total_seconds()
             if time_since_failure > self.recovery_timeout:
                 self.is_half_open = True
                 self.is_open = False

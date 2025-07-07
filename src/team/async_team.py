@@ -158,6 +158,10 @@ class AsyncTeam:
 
             # Use timeout for individual agent
             async with asyncio.timeout(self.timeout):
+                # Check if agent has a model
+                if not agent.model:
+                    raise AgentExecutionError(f"Agent {agent.name} has no model")
+
                 # Try different async methods based on what's available
                 if hasattr(agent.model, "aresponse"):
                     response = await agent.model.aresponse(messages)
@@ -170,11 +174,19 @@ class AsyncTeam:
 
             # Extract content from response
             if hasattr(response, "content"):
-                return response.content
+                return (
+                    str(response.content)
+                    if response.content is not None
+                    else "No content"
+                )
             elif isinstance(response, dict) and "content" in response:
-                return response["content"]
+                return (
+                    str(response["content"])
+                    if response["content"] is not None
+                    else "No content"
+                )
             else:
-                return str(response)
+                return str(response) if response is not None else "No response"
 
         except asyncio.TimeoutError:
             raise AgentExecutionError(f"Agent {agent.name} timed out")

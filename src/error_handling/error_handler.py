@@ -71,7 +71,10 @@ class EnhancedErrorHandler:
         self, error: Exception, error_type: ErrorType
     ) -> ErrorSeverity:
         """Assess error severity based on type and content."""
-        if isinstance(error, ValidationError) or error_type in (ErrorType.VALIDATION, ErrorType.VALIDATION_ERROR):
+        if isinstance(error, ValidationError) or error_type in (
+            ErrorType.VALIDATION,
+            ErrorType.VALIDATION_ERROR,
+        ):
             return ErrorSeverity.LOW
         elif error_type == ErrorType.TEAM_INITIALIZATION:
             return ErrorSeverity.CRITICAL
@@ -84,7 +87,10 @@ class EnhancedErrorHandler:
 
     def _apply_recovery_strategy(self, error_context: ErrorContext) -> Optional[str]:
         """Apply appropriate recovery strategy based on error type."""
-        if error_context.error_type in (ErrorType.VALIDATION, ErrorType.VALIDATION_ERROR):
+        if error_context.error_type in (
+            ErrorType.VALIDATION,
+            ErrorType.VALIDATION_ERROR,
+        ):
             return "Input validation failed. Please check the format and try again."
 
         elif error_context.error_type == ErrorType.TEAM_PROCESSING:

@@ -3,7 +3,7 @@ Team coordination and initialization logic.
 """
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 from agno.agent import Agent
 from models.protocols import ModelProtocol
 
@@ -35,7 +35,7 @@ class TeamCoordinator:
         """
         if self.teams_initialized:
             return
-            
+
         try:
             # Get models
             team_model = await self._get_team_model()
@@ -58,6 +58,7 @@ class TeamCoordinator:
 
     async def _get_team_model(self) -> ModelProtocol:
         """Get the primary team model."""
+        team_model_id = "unknown"
         try:
             config = LLMProviderFactory.get_provider_config(self.provider)
             config.validate()
@@ -67,12 +68,13 @@ class TeamCoordinator:
         except Exception as e:
             raise ModelInitializationError(
                 provider=self.provider,
-                model_id=team_model_id if "team_model_id" in locals() else "unknown",
+                model_id=team_model_id,
                 reason=str(e),
             )
 
     async def _get_reflection_model(self) -> ModelProtocol:
         """Get the reflection team model."""
+        reflection_model_id = "unknown"
         try:
             config = LLMProviderFactory.get_provider_config(self.provider)
             config.validate()
@@ -82,9 +84,7 @@ class TeamCoordinator:
         except Exception as e:
             raise ModelInitializationError(
                 provider=self.provider,
-                model_id=reflection_model_id
-                if "reflection_model_id" in locals()
-                else "unknown",
+                model_id=reflection_model_id,
                 reason=str(e),
             )
 
@@ -169,7 +169,9 @@ class TeamCoordinator:
                 role=config["role"],
                 goal=f"Excel at {config['role'].lower()}",
                 instructions=config["instructions"],
-                model=model,
+                model=cast(
+                    Any, model
+                ),  # Cast ModelProtocol to Any for Agent compatibility
             )
             agents.append(agent)
 
@@ -223,7 +225,9 @@ class TeamCoordinator:
                 role=config["role"],
                 goal=f"Excel at {config['role'].lower()}",
                 instructions=config["instructions"],
-                model=model,
+                model=cast(
+                    Any, model
+                ),  # Cast ModelProtocol to Any for Agent compatibility
             )
             agents.append(agent)
 

@@ -3,9 +3,8 @@ Analysis models for thought processing system.
 Contains models for reflection, quality assessment, and thought sequence analysis.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, computed_field, field_validator
-from enum import Enum
 
 
 class ReflectionFeedback(BaseModel):
@@ -73,7 +72,7 @@ class QualityIndicators(BaseModel):
     completeness_score: float = Field(
         0.7, ge=0.0, le=1.0, description="How complete the analysis is"
     )
-    
+
     @computed_field
     @property
     def overall_quality_estimate(self) -> float:
@@ -86,33 +85,30 @@ class QualityIndicators(BaseModel):
             "innovation": 0.05,
             "completeness": 0.1,
         }
-        
+
         weighted_sum = (
-            self.clarity_score * weights["clarity"] +
-            self.depth_score * weights["depth"] +
-            self.coherence_score * weights["coherence"] +
-            self.relevance_score * weights["relevance"] +
-            self.innovation_score * weights["innovation"] +
-            self.completeness_score * weights["completeness"]
+            self.clarity_score * weights["clarity"]
+            + self.depth_score * weights["depth"]
+            + self.coherence_score * weights["coherence"]
+            + self.relevance_score * weights["relevance"]
+            + self.innovation_score * weights["innovation"]
+            + self.completeness_score * weights["completeness"]
         )
-        
+
         return round(weighted_sum, 2)
-    
+
     @computed_field
     @property
     def progress_percentage(self) -> float:
         """Estimates progress based on quality indicators."""
         # Higher quality generally indicates more progress
         return min(self.overall_quality_estimate * 100, 95.0)
-    
+
     @computed_field
     @property
     def is_final_thought(self) -> bool:
         """Determines if this represents final thought quality."""
-        return (
-            self.completeness_score >= 0.9 and
-            self.overall_quality_estimate >= 0.8
-        )
+        return self.completeness_score >= 0.9 and self.overall_quality_estimate >= 0.8
 
 
 class BranchAnalysis(BaseModel):
@@ -135,9 +131,7 @@ class BranchAnalysis(BaseModel):
     effectiveness: float = Field(
         0.5, ge=0.0, le=1.0, description="Branch effectiveness rating"
     )
-    recommendation: str = Field(
-        "continue", description="Recommendation for the branch"
-    )
+    recommendation: str = Field("continue", description="Recommendation for the branch")
 
     @computed_field
     @property
@@ -159,9 +153,7 @@ class ThoughtSequenceReview(BaseModel):
     """Comprehensive review of a thought sequence."""
 
     totalThoughts: int = Field(..., ge=0, description="Total thoughts analyzed")
-    branches: List[str] = Field(
-        default_factory=list, description="Branch identifiers"
-    )
+    branches: List[str] = Field(default_factory=list, description="Branch identifiers")
     summary: str = Field(..., description="Executive summary of the sequence")
     keyInsights: List[str] = Field(
         default_factory=list, description="Key insights discovered"

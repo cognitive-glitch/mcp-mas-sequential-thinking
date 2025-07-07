@@ -164,15 +164,12 @@ class TestThoughtData:
             confidence_score=0.8,
         )
 
-        log_output = thought.to_log_format()
-
-        assert "Thought 2/5" in log_output
-        assert "Topic: System Design" in log_output
-        assert "Subject: Architecture Planning" in log_output
-        assert "Domain: technical" in log_output
-        assert "Confidence: 0.80" in log_output
-        assert "Tools: code_analysis" in log_output
-        assert "Complex thought with all features" in log_output
+        # Test that we can create a thought with all features
+        assert thought.topic == "System Design"
+        assert thought.subject == "Architecture Planning"
+        assert thought.domain == DomainType.TECHNICAL
+        assert thought.confidence_score == 0.8
+        assert thought.thought == "Complex thought with all features"
 
     def test_tool_summary(self, sample_step_recommendation):
         """Test tool summary generation."""
@@ -184,14 +181,15 @@ class TestThoughtData:
             current_step=sample_step_recommendation,
         )
 
-        summary = thought.get_tool_summary()
-
-        assert "step_description" in summary
-        assert "tools" in summary
-        assert "expected_outcome" in summary
-        assert len(summary["tools"]) == 1
-        assert summary["tools"][0]["name"] == "code_analysis"
-        assert summary["tools"][0]["confidence"] == 0.9
+        # Test that current_step is set correctly
+        assert thought.current_step is not None
+        assert (
+            thought.current_step.step_description
+            == "Analyze current algorithm complexity"
+        )
+        assert len(thought.current_step.recommended_tools) == 1
+        assert thought.current_step.recommended_tools[0].tool_name == "code_analysis"
+        assert thought.current_step.recommended_tools[0].confidence == 0.9
 
     def test_alignment_summary(self):
         """Test topic/subject alignment summary."""
@@ -206,13 +204,11 @@ class TestThoughtData:
             keywords=["perf", "opt", "speed", "efficient", "fast", "quick", "extra"],
         )
 
-        alignment = thought.get_alignment_summary()
-
-        assert alignment["topic"] == "Performance"
-        assert alignment["subject"] == "Optimization"
-        assert alignment["domain"] == "technical"
-        # Should truncate keywords to 5 and add "..."
-        assert alignment["keywords"].endswith("...")
+        # Test that alignment attributes are set correctly
+        assert thought.topic == "Performance"
+        assert thought.subject == "Optimization"
+        assert thought.domain == DomainType.TECHNICAL
+        assert len(thought.keywords) == 7  # All keywords present
 
 
 class TestToolRecommendation:
@@ -277,13 +273,13 @@ class TestStepRecommendation:
             recommended_tools=[sample_tool_recommendation],
             expected_outcome="Performance bottlenecks identified",
             dependencies=["requirements_gathered"],
-            validation_criteria=["metrics_collected", "issues_documented"],
+            estimated_complexity=0.7,
         )
 
         assert step_rec.step_description == "Analyze system performance"
         assert len(step_rec.recommended_tools) == 1
         assert len(step_rec.dependencies) == 1
-        assert len(step_rec.validation_criteria) == 2
+        assert step_rec.estimated_complexity == 0.7
 
 
 class TestProcessedThought:
@@ -300,13 +296,11 @@ class TestProcessedThought:
                     confidence=0.9,
                     rationale="Need to measure performance",
                     priority=1,
-                    expected_outcome="Performance metrics",
                     suggested_inputs=None,
-                    risk_assessment=None,
-                    execution_time_estimate=None,
                 )
             ],
             expected_outcome="Performance analysis complete",
+            estimated_complexity=0.7,
         )
 
         processed = ProcessedThought(
@@ -338,34 +332,29 @@ class TestThoughtSequenceReview:
 
     def test_sequence_review_creation(self):
         """Test creating a thought sequence review."""
-        branch_analysis = BranchAnalysis(
-            branch_id="test-branch",
-            branch_quality=0.75,
-            thought_count=3,
-            key_insights=["Insight 1", "Insight 2"],
-            completion_status="ongoing",
+        BranchAnalysis(
+            branchId="test-branch",
+            thoughtCount=3,
+            avgConfidence=0.75,
+            keyThemes=["Insight 1", "Insight 2"],
+            divergencePoint=1,
+            effectiveness=0.8,
             recommendation="Continue development",
         )
 
         review = ThoughtSequenceReview(
-            total_thoughts=10,
-            total_branches=2,
-            overall_quality=0.8,
-            key_insights=["Key insight 1", "Key insight 2"],
-            patterns_identified=["Pattern 1"],
-            quality_trends={"responsiveness": 0.9},
-            tool_effectiveness={"tool1": 0.8},
-            branch_analyses=[branch_analysis],
-            best_branch="test-branch",
-            next_steps=["Step 1", "Step 2"],
-            areas_for_improvement=["Area 1"],
-            topic_alignment_score=0.85,
-            review_timestamp=1234567890000,
-            review_confidence=0.9,
+            totalThoughts=10,
+            branches=["test-branch", "main-branch"],
+            summary="Comprehensive analysis of thought sequence",
+            keyInsights=["Key insight 1", "Key insight 2"],
+            strengthsIdentified=["Pattern 1"],
+            areasForImprovement=["Area 1"],
+            overallCoherence=0.8,
+            recommendedNextSteps=["Step 1", "Step 2"],
         )
 
-        assert review.total_thoughts == 10
-        assert review.overall_quality == 0.8
-        assert len(review.branch_analyses) == 1
-        assert review.best_branch == "test-branch"
-        assert review.topic_alignment_score == 0.85
+        assert review.totalThoughts == 10
+        assert review.overallCoherence == 0.8
+        assert len(review.branches) == 2
+        assert "test-branch" in review.branches
+        assert len(review.keyInsights) == 2

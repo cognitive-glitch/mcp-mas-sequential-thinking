@@ -9,7 +9,7 @@ from .error_handler import EnhancedErrorHandler
 
 __all__ = [
     "CircuitBreaker",
-    "ErrorContext", 
+    "ErrorContext",
     "ErrorSeverity",
     "EnhancedErrorHandler",
 ]

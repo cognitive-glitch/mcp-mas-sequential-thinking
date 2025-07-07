@@ -15,6 +15,7 @@ from src.models.thought_models import (
     ToolRecommendation,
     StepRecommendation,
 )
+from src.models.tool_models import ToolDecision
 from src.context.shared_context import SharedContext
 from src.providers.base import ProviderConfig
 
@@ -75,13 +76,14 @@ class MockTeam:
 @pytest.fixture
 def sample_thought_data():
     """Provide sample thought data for testing."""
-    return ThoughtData(
+    return create_test_thought_data(
         thought="Analyze the performance characteristics of the dual-team architecture",
         thoughtNumber=1,
         totalThoughts=3,
         nextThoughtNeeded=True,
         topic="Performance Analysis",
         subject="Architecture Evaluation",
+        quality_indicators=None,
         domain=DomainType.TECHNICAL,
         keywords=["performance", "architecture", "analysis"],
         timestamp_ms=1234567890000,
@@ -93,7 +95,6 @@ def sample_thought_data():
         current_step=None,
         reflection_feedback=None,
         confidence_score=0.8,
-        processing_time_ms=1000,
     )
 
 
@@ -153,11 +154,10 @@ def sample_tool_recommendation():
         confidence=0.9,
         rationale="Need to understand current performance bottlenecks",
         priority=1,
-        expected_outcome="Identify O(n) complexity issues",
         alternatives=["profiling_tool", "benchmark_suite"],
         suggested_inputs={"file_path": "src/"},
-        risk_assessment="Low risk analysis tool",
-        execution_time_estimate=5000,
+        expected_benefits=["Identify O(n) complexity issues"],
+        limitations=["May miss runtime-only issues"],
     )
 
 
@@ -168,8 +168,8 @@ def sample_step_recommendation(sample_tool_recommendation):
         step_description="Analyze current algorithm complexity",
         recommended_tools=[sample_tool_recommendation],
         expected_outcome="Understanding of performance characteristics",
+        estimated_complexity=0.7,
         dependencies=["requirements_analysis"],
-        validation_criteria=["complexity_identified", "bottlenecks_documented"],
     )
 
 
@@ -195,6 +195,15 @@ def setup_test_environment():
     for var in test_vars:
         if var in os.environ:
             del os.environ[var]
+
+
+@pytest.fixture
+def mock_session_context():
+    """Provide a mock session context for testing."""
+    context = Mock()
+    context.session_id = "test-session-123"
+    context.start_time = 1234567890000
+    return context
 
 
 @pytest.fixture
@@ -260,12 +269,29 @@ def create_test_thought_data(**overrides):
         "needsMoreThoughts": False,
         "current_step": None,
         "reflection_feedback": None,
+        "quality_indicators": None,
         "confidence_score": 0.5,
         "timestamp_ms": 1234567890000,
-        "processing_time_ms": 1000,
+        # Remove processing_time_ms as it's not a valid ThoughtData parameter
     }
     defaults.update(overrides)
     return ThoughtData(**defaults)
+
+
+def create_test_tool_decision(**overrides):
+    """Utility function to create ToolDecision with sensible defaults for testing."""
+    defaults = {
+        "tool_name": "test_tool",
+        "rationale": "Test rationale",
+        "alternatives_considered": [],
+        "confidence": 0.8,
+        "outcome": "Test outcome",
+        "execution_time_ms": 1000,
+        "success": True,
+        "error_message": None,
+    }
+    defaults.update(overrides)
+    return ToolDecision(**defaults)
 
 
 def create_test_tool_recommendation(**overrides):

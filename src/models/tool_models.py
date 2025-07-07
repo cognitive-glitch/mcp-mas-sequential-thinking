@@ -86,11 +86,13 @@ class StepRecommendation(BaseModel):
 
     @field_validator("recommended_tools")
     @classmethod
-    def validate_tool_priorities(cls, v: List[ToolRecommendation]) -> List[ToolRecommendation]:
+    def validate_tool_priorities(
+        cls, v: List[ToolRecommendation]
+    ) -> List[ToolRecommendation]:
         """Ensure tools have unique priorities."""
         if not v:
             return v
-        
+
         priorities = [tool.priority for tool in v]
         if len(priorities) != len(set(priorities)):
             # Auto-fix duplicate priorities
@@ -186,6 +188,9 @@ class ToolSelectionResult(BaseModel):
             alternatives_considered=self.alternative_tools,
             confidence=self.confidence_score,
             outcome=outcome,
+            execution_time_ms=None,
+            success=True,
+            error_message=None,
         )
 
 
