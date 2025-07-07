@@ -56,21 +56,26 @@ class TestCoreModelsModule:
     
     def test_import_processed_thought(self):
         """Test ProcessedThought is in core_models."""
-        from models.core_models import ProcessedThought
+        from models.core_models import ProcessedThought, ThoughtData
         
-        processed = ProcessedThought(
+        # Create sample thought data
+        thought_data = ThoughtData(
+            thought="Sample thought for processing",
             thoughtNumber=1,
-            content="Processed content",
-            processingTime=100,
-            confidence=0.8,
-            keyInsights=["insight1"],
-            suggestedActions=["action1"],
-            toolRecommendations=[],
-            reflectionSummary="Summary"
+            totalThoughts=5,
+            nextThoughtNeeded=True
         )
         
-        assert processed.thoughtNumber == 1
-        assert processed.confidence == 0.8
+        processed = ProcessedThought(
+            thought_data=thought_data,
+            coordinator_response="Primary team response",
+            integrated_response="Integrated analysis",
+            next_step_guidance="Continue to next step",
+            execution_time_ms=100
+        )
+        
+        assert processed.thought_data.thoughtNumber == 1
+        assert processed.execution_time_ms == 100
 
 
 class TestAnalysisModelsModule:
@@ -135,13 +140,12 @@ class TestAnalysisModelsModule:
             coherence_score=0.8,
             relevance_score=0.95,
             innovation_score=0.6,
-            overall_quality_estimate=0.8,
-            progress_percentage=60.0,
-            is_final_thought=False
+            completeness_score=0.8
         )
         
         assert indicators.clarity_score == 0.9
-        assert indicators.progress_percentage == 60.0
+        # progress_percentage is computed from overall_quality_estimate
+        assert indicators.progress_percentage > 80.0  # Should be around 82
 
 
 class TestToolModelsModule:

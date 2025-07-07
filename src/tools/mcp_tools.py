@@ -154,11 +154,12 @@ async def reflectivethinking(
     logger.info(f"Processing thought #{thought_number}")
 
     try:
+        # Import models needed for conversion
+        from models.thought_models import StepRecommendation, ToolRecommendation
+
         # Convert current_step from dict to StepRecommendation if provided
         step_recommendation = None
         if current_step:
-            from models.thought_models import StepRecommendation, ToolRecommendation
-
             # Convert tool recommendations
             tool_recs = []
             for tool in current_step.get("recommended_tools", []):
@@ -170,9 +171,8 @@ async def reflectivethinking(
                         priority=tool["priority"],
                         suggested_inputs=tool.get("suggested_inputs"),
                         alternatives=tool.get("alternatives", []),
-                        expected_outcome=tool.get("expected_outcome", ""),
-                        risk_assessment=None,
-                        execution_time_estimate=None,
+                        expected_benefits=tool.get("expected_benefits", []),
+                        limitations=tool.get("limitations", []),
                     )
                 )
 
@@ -183,7 +183,43 @@ async def reflectivethinking(
                 next_step_conditions=current_step.get("next_step_conditions", []),
             )
 
-        # Create ThoughtData from parameters
+        # Convert previous_steps from list of dicts to list of StepRecommendation objects
+        converted_previous_steps = []
+        if previous_steps:
+            for step_dict in previous_steps:
+                try:
+                    # Convert tool recommendations for this previous step
+                    prev_tool_recs = []
+                    for tool in step_dict.get("recommended_tools", []):
+                        prev_tool_recs.append(
+                            ToolRecommendation(
+                                tool_name=tool["tool_name"],
+                                confidence=tool["confidence"],
+                                rationale=tool["rationale"],
+                                priority=tool["priority"],
+                                suggested_inputs=tool.get("suggested_inputs"),
+                                alternatives=tool.get("alternatives", []),
+                                expected_benefits=tool.get("expected_benefits", []),
+                                limitations=tool.get("limitations", []),
+                            )
+                        )
+                    
+                    # Create StepRecommendation object
+                    prev_step_obj = StepRecommendation(
+                        step_description=step_dict["step_description"],
+                        recommended_tools=prev_tool_recs,
+                        expected_outcome=step_dict["expected_outcome"],
+                        next_step_conditions=step_dict.get("next_step_conditions", []),
+                        estimated_complexity=step_dict.get("estimated_complexity", 0.5),
+                        dependencies=step_dict.get("dependencies", []),
+                    )
+                    converted_previous_steps.append(prev_step_obj)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to convert previous step: {e}. Skipping invalid step.")
+                    # Continue processing other valid steps
+
+        # Create ThoughtData from parameters (only valid fields)
         thought_data = ThoughtData(
             thought=thought,
             thoughtNumber=thought_number,
@@ -195,9 +231,8 @@ async def reflectivethinking(
             branchId=branch_id,
             needsMoreThoughts=needs_more_thoughts,
             current_step=step_recommendation,
-            previous_steps=[],  # TODO: Convert previous_steps if needed
-            remaining_steps=remaining_steps or [],
-            # Defaults for other fields
+            previous_steps=converted_previous_steps,
+            # Valid ThoughtData fields only
             domain=DomainType.GENERAL,
             keywords=[],
             confidence_score=0.5,
@@ -205,7 +240,6 @@ async def reflectivethinking(
             topic=None,
             subject=None,
             reflection_feedback=None,
-            processing_time_ms=0,
         )
 
         # Process through dual teams
