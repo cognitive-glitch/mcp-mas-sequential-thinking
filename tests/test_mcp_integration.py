@@ -11,6 +11,7 @@ from main import (
     reflectivethinking,
     toolselectthinking,
     reflectivereview,
+    AppContext,
 )
 
 

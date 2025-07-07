@@ -356,8 +356,5 @@ class TestToolSelector:
         creative_rec = tool_selector.recommend_tools(creative_thought)
 
         # Different domains should potentially yield different recommendations
-        tech_tools = [r.tool_name for r in tech_rec.recommended_tools]
-        creative_tools = [r.tool_name for r in creative_rec.recommended_tools]
-
         # Not necessarily completely different, but confidence may vary
         assert tech_rec.recommended_tools or creative_rec.recommended_tools

@@ -104,7 +104,7 @@ class LLMProviderFactory:
 
         Args:
             provider_name: Name of the provider. If None, uses LLM_PROVIDER env var.
-                         Defaults to 'openrouter' if not set.
+                         Defaults to 'openai' if not set.
 
         Returns:
             ProviderConfig instance
@@ -113,7 +113,7 @@ class LLMProviderFactory:
             ValueError: If provider is not supported
         """
         if provider_name is None:
-            provider_name = os.environ.get("LLM_PROVIDER", "openrouter").lower()
+            provider_name = os.environ.get("LLM_PROVIDER", "openai").lower()
 
         if provider_name not in cls.PROVIDERS:
             available = ", ".join(cls.PROVIDERS.keys())

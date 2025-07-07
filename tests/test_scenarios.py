@@ -95,7 +95,7 @@ class TestRealWorldScenarios:
             )
 
             # 2. Tool selection for design
-            tools = await toolselectthinking(
+            await toolselectthinking(
                 thought="Select tools for architecture design and documentation",
                 available_tools=[
                     "diagram_tool",
@@ -191,7 +191,7 @@ class TestRealWorldScenarios:
             )
 
             # 2. Select debugging tools
-            tools = await toolselectthinking(
+            await toolselectthinking(
                 thought="Select tools for performance profiling and monitoring",
                 available_tools=["profiler", "apm_tool", "log_analyzer", "db_monitor"],
                 domain="technical",
@@ -206,7 +206,7 @@ class TestRealWorldScenarios:
             )
 
             # 4. Implement fix
-            thought3 = await reflectivethinking(
+            await reflectivethinking(
                 thought="Implement connection pooling optimization and query batching",
                 thoughtNumber=3,
                 totalThoughts=5,
@@ -214,7 +214,7 @@ class TestRealWorldScenarios:
             )
 
             # 5. Verify fix
-            thought4 = await reflectivethinking(
+            await reflectivethinking(
                 thought="Deploy fix to staging and run load tests - response times now < 200ms",
                 thoughtNumber=4,
                 totalThoughts=5,
@@ -222,7 +222,7 @@ class TestRealWorldScenarios:
             )
 
             # 6. Post-mortem
-            thought5 = await reflectivethinking(
+            await reflectivethinking(
                 thought="Document root cause analysis and prevention measures",
                 thoughtNumber=5,
                 totalThoughts=5,

@@ -14,16 +14,15 @@ from main import (
     AppContext,
     reflectivethinking,
     toolselectthinking,
+    reflectivereview,
 )
+from src.models.thought_models import ValidationError as ThoughtValidationError
 
 
 class CircuitBreakerError(Exception):
     """Circuit breaker error for testing."""
 
     pass
-
-
-from src.models.thought_models import ValidationError as ThoughtValidationError
 
 
 class TestCircuitBreaker:
@@ -173,9 +172,7 @@ class TestErrorHandler:
         for i in range(5):
             try:
                 error = Exception("Team init failed")
-                result = error_handler.handle_error(
-                    error, ErrorType.TEAM_INITIALIZATION
-                )
+                error_handler.handle_error(error, ErrorType.TEAM_INITIALIZATION)
             except CircuitBreakerError as e:
                 # Circuit breaker should trip after threshold
                 assert "circuit breaker open" in str(e).lower()
