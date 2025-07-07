@@ -19,7 +19,7 @@ class TestMCPEndpoints:
     """Test the MCP tool endpoints for full integration."""
 
     @pytest.fixture
-    async def mock_team_response(self):
+    def mock_team_response(self):
         """Mock team response for testing."""
         response = Mock()
         response.content = """

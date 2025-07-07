@@ -73,7 +73,7 @@ class TestSharedContextAdvanced:
         thoughts = []
         for i in range(1, 7):
             thought = create_test_thought_data(
-                thought=f"Thought {i}",
+                thought=f"Test thought number {i} with sufficient content",
                 thoughtNumber=i,
                 totalThoughts=6,
                 nextThoughtNeeded=(i < 6),
@@ -238,7 +238,7 @@ class TestSharedContextAdvanced:
         # Create revision chain: 2 revises 1, 3 revises 2, 4 revises 3
         for i in range(2, 5):
             thought = create_test_thought_data(
-                thought=f"Revision {i - 1}",
+                thought=f"This is revision {i - 1} providing substantial new insights and improvements to the previous thought",
                 thoughtNumber=i,
                 isRevision=True,
                 revisesThought=i - 1,
@@ -270,50 +270,57 @@ class TestSharedContextAdvanced:
         )
         await context.update_from_thought(thought1)
 
-        # Branch A
+        # Continue linearly to thought 2
         thought2 = create_test_thought_data(
             thoughtNumber=2,
-            branchFromThought=1,
-            branchId="approach-a",
             session_context=mock_session_context,
         )
         await context.update_from_thought(thought2)
 
-        # Branch B
+        # Branch A from thought 1
         thought3 = create_test_thought_data(
             thoughtNumber=3,
             branchFromThought=1,
-            branchId="approach-b",
+            branchId="approach-a",
             session_context=mock_session_context,
         )
         await context.update_from_thought(thought3)
 
-        # Merge point
+        # Branch B from thought 1
         thought4 = create_test_thought_data(
             thoughtNumber=4,
+            branchFromThought=1,
+            branchId="approach-b",
+            session_context=mock_session_context,
+        )
+        await context.update_from_thought(thought4)
+
+        # Merge point
+        thought5 = create_test_thought_data(
+            thoughtNumber=5,
             session_context=mock_session_context,
             thought_relationships=[
                 ThoughtRelation(
-                    from_thought=2,
-                    to_thought=4,
+                    from_thought=3,
+                    to_thought=5,
                     relation_type="merges_to",
                     strength=0.8,
                 ),
                 ThoughtRelation(
-                    from_thought=3,
-                    to_thought=4,
+                    from_thought=4,
+                    to_thought=5,
                     relation_type="merges_to",
                     strength=0.7,
                 ),
             ],
         )
-        await context.update_from_thought(thought4)
+        await context.update_from_thought(thought5)
 
-        # Check merge detection
-        predecessors = list(context.thought_graph.predecessors(4))
+        # Check merge detection - thought 5 should have two predecessors (3 and 4)
+        predecessors = list(context.thought_graph.predecessors(5))
         assert len(predecessors) == 2
-        assert 2 in predecessors
         assert 3 in predecessors
+        assert 4 in predecessors
 
     @pytest.mark.asyncio
     async def test_tool_usage_patterns(self, mock_session_context):

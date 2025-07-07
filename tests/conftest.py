@@ -200,14 +200,14 @@ def event_loop():
 @pytest.fixture(autouse=True)
 def setup_test_environment():
     """Set up test environment variables."""
-    # Set test environment variables
-    os.environ["REFLECTIVE_LLM_PROVIDER"] = "test"
-    os.environ["TEST_API_KEY"] = "test-key"
+    # Set test environment variables to use openai (which is supported)
+    os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
+    os.environ["OPENAI_API_KEY"] = "test-key"
 
     yield
 
     # Clean up
-    test_vars = ["REFLECTIVE_LLM_PROVIDER", "TEST_API_KEY"]
+    test_vars = ["REFLECTIVE_LLM_PROVIDER", "OPENAI_API_KEY"]
     for var in test_vars:
         if var in os.environ:
             del os.environ[var]
@@ -261,7 +261,7 @@ SAMPLE_DOMAINS = [
 def create_test_thought_data(**overrides):
     """Utility function to create ThoughtData with sensible defaults for testing."""
     defaults = {
-        "thought": "Test thought content",
+        "thought": "Test thought content that is sufficiently long to pass validation requirements",
         "thoughtNumber": 1,
         "totalThoughts": 5,
         "nextThoughtNeeded": True,

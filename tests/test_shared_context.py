@@ -66,25 +66,25 @@ class TestSharedContext:
 
         # Create a sequence of related thoughts
         thought1 = create_test_thought_data(
-            thought="First thought",
+            thought="First thought with enough content for validation",
             thoughtNumber=1,
-            totalThoughts=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
             session_context=mock_session_context,
         )
 
         thought2 = create_test_thought_data(
-            thought="Second thought building on first",
+            thought="Second thought building on first with sufficient detail",
             thoughtNumber=2,
-            totalThoughts=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
             session_context=mock_session_context,
         )
 
         thought3 = create_test_thought_data(
-            thought="Revised first thought",
-            thoughtNumber=3,
-            totalThoughts=3,
+            thought="Revised first thought providing substantial new insights and improvements",
+            thoughtNumber=5,  # Make it final thought to avoid "ending too early"
+            totalThoughts=5,
             nextThoughtNeeded=False,
             isRevision=True,
             revisesThought=1,
