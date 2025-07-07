@@ -19,14 +19,13 @@ from .conftest import create_test_thought_data, create_test_tool_recommendation
 class TestThoughtData:
     """Test the enhanced ThoughtData model."""
 
-    def test_basic_thought_creation(self, mock_session_context):
+    def test_basic_thought_creation(self):
         """Test creating a basic thought with required fields."""
         thought = create_test_thought_data(
             thought="Test thought content",
             thoughtNumber=1,
             totalThoughts=3,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
         assert thought.thought == "Test thought content"
@@ -36,7 +35,7 @@ class TestThoughtData:
         assert thought.domain == DomainType.GENERAL  # default
         assert thought.confidence_score == 0.5  # default
 
-    def test_enhanced_thought_with_topic_alignment(self, mock_session_context):
+    def test_enhanced_thought_with_topic_alignment(self):
         """Test thought with topic/subject alignment features."""
         thought = create_test_thought_data(
             thought="Analyze system performance",
@@ -47,7 +46,6 @@ class TestThoughtData:
             subject="System Optimization",
             domain=DomainType.TECHNICAL,
             keywords=["performance", "optimization", "analysis"],
-            session_context=mock_session_context,
         )
 
         assert thought.topic == "Performance Analysis"
@@ -56,7 +54,7 @@ class TestThoughtData:
         assert "performance" in thought.keywords
         assert len(thought.keywords) == 3
 
-    def test_revision_validation(self, mock_session_context):
+    def test_revision_validation(self):
         """Test revision logic validation."""
         # Valid revision
         revision_thought = create_test_thought_data(
@@ -66,7 +64,6 @@ class TestThoughtData:
             nextThoughtNeeded=True,
             isRevision=True,
             revisesThought=2,
-            session_context=mock_session_context,
         )
 
         assert revision_thought.isRevision is True
@@ -81,10 +78,9 @@ class TestThoughtData:
                 nextThoughtNeeded=True,
                 isRevision=True,
                 revisesThought=3,  # Can't revise future thought
-                session_context=mock_session_context,
             )
 
-    def test_branching_validation(self, mock_session_context):
+    def test_branching_validation(self):
         """Test branching logic validation."""
         # Valid branch
         branch_thought = create_test_thought_data(
@@ -94,7 +90,6 @@ class TestThoughtData:
             nextThoughtNeeded=True,
             branchFromThought=2,
             branchId="performance-branch",
-            session_context=mock_session_context,
         )
 
         assert branch_thought.branchFromThought == 2
@@ -109,10 +104,9 @@ class TestThoughtData:
                 nextThoughtNeeded=True,
                 branchFromThought=2,
                 # Missing branchId
-                session_context=mock_session_context,
             )
 
-    def test_keyword_validation(self, mock_session_context):
+    def test_keyword_validation(self):
         """Test keyword validation and cleaning."""
         thought = create_test_thought_data(
             thought="Test with keywords",
@@ -127,7 +121,6 @@ class TestThoughtData:
                 "special@chars",
                 "",
             ],
-            session_context=mock_session_context,
         )
 
         # Should clean keywords while preserving case and special chars
@@ -138,7 +131,7 @@ class TestThoughtData:
         assert "special@chars" in thought.keywords  # Special chars allowed
         assert "" not in thought.keywords  # Empty strings removed
 
-    def test_topic_subject_validation(self, mock_session_context):
+    def test_topic_subject_validation(self):
         """Test topic and subject validation."""
         thought = create_test_thought_data(
             thought="Test topic validation",
@@ -147,7 +140,6 @@ class TestThoughtData:
             nextThoughtNeeded=True,
             topic="  Valid Topic  ",
             subject="",  # Empty subject should become None
-            session_context=mock_session_context,
         )
 
         assert thought.topic == "Valid Topic"  # Stripped
@@ -155,7 +147,6 @@ class TestThoughtData:
 
     def test_log_format_output(
         self,
-        mock_session_context,
         sample_tool_recommendation,
         sample_step_recommendation,
     ):
@@ -171,7 +162,6 @@ class TestThoughtData:
             keywords=["design", "architecture"],
             current_step=sample_step_recommendation,
             confidence_score=0.8,
-            session_context=mock_session_context,
         )
 
         log_output = thought.to_log_format()
@@ -184,7 +174,7 @@ class TestThoughtData:
         assert "Tools: code_analysis" in log_output
         assert "Complex thought with all features" in log_output
 
-    def test_tool_summary(self, mock_session_context, sample_step_recommendation):
+    def test_tool_summary(self, sample_step_recommendation):
         """Test tool summary generation."""
         thought = create_test_thought_data(
             thought="Test with tools",
@@ -192,7 +182,6 @@ class TestThoughtData:
             totalThoughts=3,
             nextThoughtNeeded=True,
             current_step=sample_step_recommendation,
-            session_context=mock_session_context,
         )
 
         summary = thought.get_tool_summary()
@@ -204,7 +193,7 @@ class TestThoughtData:
         assert summary["tools"][0]["name"] == "code_analysis"
         assert summary["tools"][0]["confidence"] == 0.9
 
-    def test_alignment_summary(self, mock_session_context):
+    def test_alignment_summary(self):
         """Test topic/subject alignment summary."""
         thought = create_test_thought_data(
             thought="Test alignment",
@@ -215,7 +204,6 @@ class TestThoughtData:
             subject="Optimization",
             domain=DomainType.TECHNICAL,
             keywords=["perf", "opt", "speed", "efficient", "fast", "quick", "extra"],
-            session_context=mock_session_context,
         )
 
         alignment = thought.get_alignment_summary()

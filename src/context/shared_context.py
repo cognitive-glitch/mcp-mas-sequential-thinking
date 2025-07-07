@@ -49,9 +49,15 @@ class SharedContext:
     Memory is automatically cleaned up when the process ends.
     """
 
-    def __init__(self, max_memory_items: int = 500, max_insights: int = 50):
+    def __init__(
+        self,
+        max_memory_items: int = 500,
+        max_insights: int = 50,
+        max_thought_nodes: int = 200,
+    ):
         self.max_memory_items = max_memory_items
         self.max_insights = max_insights
+        self.max_thought_nodes = max_thought_nodes
         self._lock = asyncio.Lock()
 
         # In-memory storage
@@ -129,6 +135,20 @@ class SharedContext:
             self.tool_usage_history.extend(thought_data.tool_decisions)
             if len(self.tool_usage_history) > 100:  # Keep last 100 tool decisions
                 self.tool_usage_history = self.tool_usage_history[-100:]
+
+            # Evict old thought nodes if graph gets too large
+            if self.thought_graph.number_of_nodes() > self.max_thought_nodes:
+                # Get oldest nodes by thought number (assuming sequential numbering)
+                all_nodes = sorted(self.thought_graph.nodes())
+                nodes_to_remove = all_nodes[: -self.max_thought_nodes]
+
+                # Remove nodes and their edges
+                for node in nodes_to_remove:
+                    self.thought_graph.remove_node(node)
+
+                logger.debug(
+                    f"Evicted {len(nodes_to_remove)} old thought nodes from graph"
+                )
 
             # Update snapshot
             if thought_data.context_snapshot:
@@ -284,13 +304,14 @@ class SharedContext:
             ),
         }
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Clear all stored data (useful for cleanup)."""
-        self.memory_store.clear()
-        self.tool_usage_history.clear()
-        self.thought_graph.clear()
-        self.key_insights.clear()
-        self.performance_metrics.clear()
-        self.access_count = 0
-        self.last_updated = datetime.now(timezone.utc)
-        logger.info("Cleared all context data")
+        async with self._lock:
+            self.memory_store.clear()
+            self.tool_usage_history.clear()
+            self.thought_graph.clear()
+            self.key_insights.clear()
+            self.performance_metrics.clear()
+            self.access_count = 0
+            self.last_updated = datetime.now(timezone.utc)
+            logger.info("Shared context cleared")

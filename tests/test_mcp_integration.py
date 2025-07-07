@@ -7,11 +7,11 @@ import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
-from src.main import (
+from src.tools.mcp_tools import (
     reflectivethinking,
     reflectivereview,
-    EnhancedAppContext as AppContext,
 )
+from src.main import EnhancedAppContext as AppContext
 
 
 class TestMCPEndpoints:
@@ -374,60 +374,59 @@ class TestMCPPrompts:
 
     def test_sequential_thinking_prompt(self):
         """Test sequential thinking prompt generation."""
-        from src.main import sequential_thinking_prompt
+        from src.tools.mcp_tools import sequential_thinking_prompt
 
         result = sequential_thinking_prompt(
             problem="Design a distributed task queue",
             context="High throughput, fault tolerance required",
         )
 
-        assert len(result) == 1
-        assert "messages" in result[0]
-        messages = result[0]["messages"]
-
-        assert len(messages) == 2
-        assert messages[0]["role"] == "user"
-        assert messages[1]["role"] == "assistant"
+        # Current format returns dict with user/assistant keys
+        assert "user" in result
+        assert "assistant" in result
 
         # Check content
-        user_content = messages[0]["content"]["text"]
+        user_content = result["user"]
         assert "distributed task queue" in user_content
         assert "High throughput" in user_content
 
-        assistant_content = messages[1]["content"]["text"]
+        assistant_content = result["assistant"]
         assert "Sequential Thinking Goals" in assistant_content
         assert "reflectivethinking" in assistant_content
 
     def test_tool_selection_prompt(self):
         """Test tool selection prompt generation."""
-        from src.main import tool_selection_prompt
+        from src.tools.mcp_tools import tool_selection_prompt
 
         result = tool_selection_prompt(
             task="Analyze Python code for security vulnerabilities",
             available_tools="bandit, pylint, mypy, black",
         )
 
-        assert len(result) == 1
-        messages = result[0]["messages"]
+        # Current format returns dict with user/assistant keys
+        assert "user" in result
+        assert "assistant" in result
 
-        user_content = messages[0]["content"]["text"]
+        user_content = result["user"]
         assert "security vulnerabilities" in user_content
         assert "bandit" in user_content
 
     def test_thought_review_prompt(self):
         """Test thought review prompt generation."""
-        from src.main import thought_review_prompt
+        from src.tools.mcp_tools import thought_review_prompt
 
         result = thought_review_prompt()
 
-        messages = result[0]["messages"]
-        user_content = messages[0]["content"]["text"]
+        # Current format returns dict with user/assistant keys
+        assert "user" in result
+        assert "assistant" in result
 
+        user_content = result["user"]
         assert "Key insights" in user_content
 
     def test_complex_problem_prompt(self):
         """Test complex problem prompt generation."""
-        from src.main import complex_problem_prompt
+        from src.tools.mcp_tools import complex_problem_prompt
 
         result = complex_problem_prompt(
             problem="Migrate monolith to microservices",
@@ -435,9 +434,11 @@ class TestMCPPrompts:
             goals="Improve scalability, maintain reliability",
         )
 
-        messages = result[0]["messages"]
-        user_content = messages[0]["content"]["text"]
+        # Current format returns dict with user/assistant keys
+        assert "user" in result
+        assert "assistant" in result
 
+        user_content = result["user"]
         assert "monolith to microservices" in user_content
         assert "6 month timeline" in user_content
         assert "Improve scalability" in user_content

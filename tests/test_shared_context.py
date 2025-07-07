@@ -368,7 +368,7 @@ class TestSharedContext:
         assert len(context.key_insights) <= 3
 
         # Test clear functionality
-        context.clear()
+        await context.clear()
         assert len(context.memory_store) == 0
         assert len(context.key_insights) == 0
         assert context.thought_graph.number_of_nodes() == 0
