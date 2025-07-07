@@ -44,7 +44,7 @@ class Insight:
 class SharedContext:
     """
     Simple in-memory shared context for multi-agent coordination.
-    
+
     Maintains state only for the current execution - no persistence, no sessions.
     Memory is automatically cleaned up when the process ends.
     """
@@ -71,14 +71,14 @@ class SharedContext:
         async with self._lock:
             self.memory_store[key] = value
             self.last_updated = datetime.now(timezone.utc)
-            
+
             # Simple memory limit enforcement (FIFO eviction)
             if len(self.memory_store) > self.max_memory_items:
-                oldest_keys = list(self.memory_store.keys())[:-self.max_memory_items]
+                oldest_keys = list(self.memory_store.keys())[: -self.max_memory_items]
                 for old_key in oldest_keys:
                     del self.memory_store[old_key]
                 logger.debug(f"Evicted {len(oldest_keys)} old memory entries")
-            
+
             logger.debug(f"Updated context key '{key}'")
 
     async def get_context(self, key: str, default: Any = None) -> Any:
@@ -212,12 +212,12 @@ class SharedContext:
                 timestamp=datetime.now(timezone.utc),
             )
             self.key_insights.append(insight)
-            
+
             # Keep only recent insights
             if len(self.key_insights) > self.max_insights:
-                self.key_insights = self.key_insights[-self.max_insights:]
+                self.key_insights = self.key_insights[-self.max_insights :]
                 logger.debug(f"Trimmed insights to {self.max_insights} entries")
-            
+
             self.last_updated = datetime.now(timezone.utc)
             logger.info(f"Added insight: {content[:50]}...")
 
@@ -225,10 +225,12 @@ class SharedContext:
         """Records a performance metric."""
         async with self._lock:
             self.performance_metrics[metric_name].append(value)
-            
+
             # Keep only recent metrics (last 100 per metric)
             if len(self.performance_metrics[metric_name]) > 100:
-                self.performance_metrics[metric_name] = self.performance_metrics[metric_name][-100:]
+                self.performance_metrics[metric_name] = self.performance_metrics[
+                    metric_name
+                ][-100:]
 
     async def get_performance_summary(self) -> Dict[str, Dict[str, float]]:
         """Gets summary statistics for performance metrics."""
@@ -268,7 +270,9 @@ class SharedContext:
             "thought_nodes": self.thought_graph.number_of_nodes(),
             "thought_edges": self.thought_graph.number_of_edges(),
             "insights_count": len(self.key_insights),
-            "performance_metrics": sum(len(values) for values in self.performance_metrics.values()),
+            "performance_metrics": sum(
+                len(values) for values in self.performance_metrics.values()
+            ),
         }
 
     def clear(self) -> None:

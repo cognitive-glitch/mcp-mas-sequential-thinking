@@ -331,13 +331,13 @@ class TestSharedContext:
         # Should have enforced limits
         assert len(context.memory_store) <= 5
         assert len(context.key_insights) <= 3
-        
+
         # Test clear functionality
         context.clear()
         assert len(context.memory_store) == 0
         assert len(context.key_insights) == 0
         assert context.thought_graph.number_of_nodes() == 0
-        
+
         # Test memory usage statistics
         await context.update_from_thought(sample_thought_data)
         stats = context.get_memory_usage()

@@ -1,76 +1,91 @@
-import os
-import sys
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from typing import AsyncIterator, Dict, List, Optional, Type, ClassVar
+#!/usr/bin/env python3
+"""
+Enhanced Reflective Sequential Thinking MCP Server with Tool Selection
+Comprehensive implementation with dual-team architecture, tool recommendations, and memory persistence.
 
+Key Features:
+- Dual-team architecture: Primary thinking team + Reflection team
+- Enhanced ThoughtData with topic/subject alignment and tool recommendations
+- Tool selection thinking: Intelligent MCP tool recommendations
+- SharedContext for memory persistence across thoughts and branches
+- LLMProviderFactory supporting OpenRouter, OpenAI, Gemini
+- Zero-token API bug fixes and comprehensive error handling
+- reflectivethinking, reflectivereview, and toolselectthinking MCP tools
+- Claude Code hooks integration ready
+"""
+
+import time
+import uuid
+import asyncio
+import logging
+import json
+from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+from datetime import datetime
+from enum import Enum
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# Core frameworks
 from mcp.server.fastmcp import FastMCP
 from agno.agent import Agent
-from agno.models.base import Model
-from agno.models.groq import Groq
-from agno.models.openrouter import OpenRouter
 from agno.team.team import Team
 from agno.tools.exa import ExaTools
 from agno.tools.thinking import ThinkingTools
 from dotenv import load_dotenv
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    ValidationError,
-    field_validator,
-    model_validator,
-    ValidationInfo,
+from pydantic import ValidationError
+
+# Enhanced local imports
+from src.models.thought_models import (
+    ThoughtData,
+    ProcessedThought,
+    ThoughtSequenceReview,
+    SessionContext,
+    DomainType,
+    BranchAnalysis,
 )
+from src.providers.base import LLMProviderFactory
+from src.context.shared_context import SharedContext
+from src.tools.tool_selector import ToolSelector
 
-import logging
 import logging.handlers
-from pathlib import Path
 
+# Load environment variables
 load_dotenv()
-os.environ["LLM_PROVIDER"] = "openrouter"
 
 
+# Configure logging
 def setup_logging() -> logging.Logger:
-    """
-    Set up application logging with both file and console handlers.
-    Logs will be stored in the user's home directory under .reflective_thinking/logs.
-
-    Returns:
-        Logger instance configured with both handlers.
-    """
-    # Create logs directory in user's home
+    """Enhanced logging setup with detailed format."""
     home_dir = Path.home()
     log_dir = home_dir / ".reflective_thinking" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create logger
-    logger = logging.getLogger("reflective_thinking")
+    logger = logging.getLogger("reflective_thinking_enhanced")
     logger.setLevel(logging.DEBUG)
 
-    # Log format
     formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - [%(name)s] - %(message)s",
+        "%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # File handler with rotation
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "reflective_thinking.log",
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
-        encoding="utf-8",
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "reflective_thinking.log",
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        print(f"Warning: Could not create file logger: {e}")
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
     return logger
@@ -79,884 +94,1256 @@ def setup_logging() -> logging.Logger:
 logger = setup_logging()
 
 
-class ThoughtData(BaseModel):
-    """
-    Represents the data structure for a single thought within the reflective
-    thinking process. Serves as the input schema for the 'reflectivethinking' tool.
-    """
+class ErrorType(Enum):
+    """Categorize different types of errors for appropriate handling."""
 
-    thought: str = Field(
-        ...,
-        description="Content of the current thought or step. Should be specific enough to imply the desired action (e.g., 'Analyze X', 'Critique Y', 'Plan Z', 'Research A').",
-        min_length=1,
-    )
-    thoughtNumber: int = Field(
-        ..., description="Sequence number of this thought (starting from 1).", ge=1
-    )
-    totalThoughts: int = Field(
-        ...,
-        description="Estimated total number of thoughts required for the entire process.",
-        ge=1,  # Basic positive check; minimum value is enforced by validator.
-    )
-    nextThoughtNeeded: bool = Field(
-        ..., description="Indicates if another thought step is expected after this one."
-    )
-    isRevision: bool = Field(
-        False, description="Flags if this thought revises a previous one."
-    )
-    revisesThought: Optional[int] = Field(
-        None,
-        description="The 'thoughtNumber' being revised, required if isRevision is True.",
-        ge=1,
-    )
-    branchFromThought: Optional[int] = Field(
-        None,
-        description="The 'thoughtNumber' from which this thought initiates a branch.",
-        ge=1,
-    )
-    branchId: Optional[str] = Field(
-        None,
-        description="A unique identifier for the branch, required if branchFromThought is set.",
-    )
-    needsMoreThoughts: bool = Field(
-        False,
-        description="Flags if more thoughts are needed beyond the current 'totalThoughts' estimate.",
-    )
-
-    # Pydantic model configuration
-    model_config = ConfigDict(
-        validate_assignment=True,
-        extra="forbid",
-        frozen=True,  # Immutable; consider mutability if in-tool modification is needed.
-        arbitrary_types_allowed=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "thought": "Analyze the core assumptions of the previous step.",
-                    "thoughtNumber": 2,
-                    "totalThoughts": 5,  # Example reflects minimum
-                    "nextThoughtNeeded": True,
-                    "isRevision": False,
-                    "revisesThought": None,
-                    "branchFromThought": None,
-                    "branchId": None,
-                    "needsMoreThoughts": False,
-                },
-                {
-                    "thought": "Critique the proposed solution for potential biases.",
-                    "thoughtNumber": 4,
-                    "totalThoughts": 5,  # Example reflects minimum
-                    "nextThoughtNeeded": True,
-                    "isRevision": False,
-                    "revisesThought": None,
-                    "branchFromThought": None,
-                    "branchId": None,
-                    "needsMoreThoughts": False,
-                },
-            ]
-        },
-    )
-
-    # --- Validators ---
-    MIN_TOTAL_THOUGHTS: ClassVar[int] = (
-        5  # Class constant for minimum required total thoughts.
-    )
-
-    @field_validator("totalThoughts")
-    @classmethod
-    def validate_total_thoughts_minimum(cls, v: int) -> int:
-        """Ensures 'totalThoughts' meets the defined minimum requirement."""
-        if v < cls.MIN_TOTAL_THOUGHTS:
-            logger.info(
-                f"Input totalThoughts ({v}) is below suggested minimum {cls.MIN_TOTAL_THOUGHTS}. "
-                f"Adjusting to {cls.MIN_TOTAL_THOUGHTS}."
-            )
-            return cls.MIN_TOTAL_THOUGHTS
-        return v
-
-    @field_validator("revisesThought")
-    @classmethod
-    def validate_revises_thought(
-        cls, v: Optional[int], info: ValidationInfo
-    ) -> Optional[int]:
-        """Validates 'revisesThought' logic."""
-        is_revision = info.data.get("isRevision", False)
-        if v is not None and not is_revision:
-            raise ValueError("revisesThought can only be set when isRevision is True")
-        # Ensure the revised thought number is valid and precedes the current thought
-        if (
-            v is not None
-            and "thoughtNumber" in info.data
-            and v >= info.data["thoughtNumber"]
-        ):
-            raise ValueError("revisesThought must be less than thoughtNumber")
-        return v
-
-    @field_validator("branchId")
-    @classmethod
-    def validate_branch_id(
-        cls, v: Optional[str], info: ValidationInfo
-    ) -> Optional[str]:
-        """Validates 'branchId' logic."""
-        branch_from_thought = info.data.get("branchFromThought")
-        if v is not None and branch_from_thought is None:
-            raise ValueError("branchId can only be set when branchFromThought is set")
-        return v
-
-    @model_validator(mode="after")
-    def validate_thought_numbers(self) -> "ThoughtData":
-        """Performs model-level validation on thought numbering."""
-        # Allow thoughtNumber > totalThoughts for dynamic adjustment downstream.
-        # revisesThought validation is handled by its field_validator.
-        if (
-            self.branchFromThought is not None
-            and self.branchFromThought >= self.thoughtNumber
-        ):
-            raise ValueError("branchFromThought must be less than thoughtNumber")
-        # Check for self.thoughtNumber <= self.totalThoughts removed;
-        # allows dynamic extension before needsMoreThoughts logic applies.
-        # Minimum totalThoughts is handled by its own validator.
-        return self
+    TEAM_INITIALIZATION = "team_initialization"
+    TEAM_PROCESSING = "team_processing"
+    MODEL_COMMUNICATION = "model_communication"
+    VALIDATION_ERROR = "validation_error"
+    CONTEXT_ERROR = "context_error"
+    TIMEOUT_ERROR = "timeout_error"
+    TOOL_SELECTION_ERROR = "tool_selection_error"
 
 
-# --- Utility for Formatting Thoughts (for Logging) ---
+class ErrorSeverity(Enum):
+    """Error severity levels for prioritization."""
 
-
-def format_thought_for_log(thought_data: ThoughtData) -> str:
-    """Formats a ThoughtData object into a human-readable string for logging.
-
-    Creates a multi-line log entry summarizing the key details of a thought,
-    including its type (standard, revision, or branch), sequence number,
-    content, and status flags.
-
-    Args:
-        thought_data: The ThoughtData object containing the thought details.
-
-    Returns:
-        A formatted string suitable for logging.
-
-    Example format:
-        Revision 5/10 (revising thought 3)
-          Thought: Refined the analysis based on critique.
-          Next Needed: True, Needs More: False
-        Branch 6/10 (from thought 4, ID: alt-approach)
-          Thought: Exploring an alternative approach.
-          Branch Details: ID='alt-approach', originates from Thought #4
-          Next Needed: True, Needs More: False
-        Thought 1/5
-          Thought: Initial plan for the analysis.
-          Next Needed: True, Needs More: False
-    """
-    prefix: str
-    context: str = ""
-    branch_info_log: Optional[str] = None  # Optional line for branch-specific details
-
-    # Determine the type of thought and associated context
-    if thought_data.isRevision and thought_data.revisesThought is not None:
-        prefix = "Revision"
-        context = f" (revising thought {thought_data.revisesThought})"
-    elif (
-        thought_data.branchFromThought is not None and thought_data.branchId is not None
-    ):
-        prefix = "Branch"
-        context = f" (from thought {thought_data.branchFromThought}, ID: {thought_data.branchId})"
-        # Prepare the extra detail line for branches
-        branch_info_log = f"  Branch Details: ID='{thought_data.branchId}', originates from Thought #{thought_data.branchFromThought}"
-    else:
-        # Standard thought
-        prefix = "Thought"
-        # No extra context needed for standard thoughts
-
-    # Construct the header line (e.g., "Thought 1/5", "Revision 3/5 (revising thought 2)")
-    header = (
-        f"{prefix} {thought_data.thoughtNumber}/{thought_data.totalThoughts}{context}"
-    )
-
-    # Assemble the log entry lines
-    log_lines = [
-        header,
-        f"  Thought: {thought_data.thought}",  # Indent thought content
-    ]
-    if branch_info_log:
-        log_lines.append(branch_info_log)  # Add branch details if applicable
-
-    # Add status flags line
-    log_lines.append(
-        f"  Next Needed: {thought_data.nextThoughtNeeded}, Needs More: {thought_data.needsMoreThoughts}"
-    )
-
-    return "\n".join(log_lines)
-
-
-# --- Agno Multi-Agent Team Setup ---
-
-
-def get_model_config() -> tuple[Type[Model], str, str]:
-    """
-    Determines the LLM provider, team model ID, and agent model ID based on environment variables.
-
-    Returns:
-        A tuple containing:
-        - ModelClass: The Agno model class (e.g., DeepSeek, Groq, OpenRouter).
-        - team_model_id: The model ID for the team coordinator.
-        - agent_model_id: The model ID for the specialist agents.
-    """
-    provider = os.environ.get("THINKING_LLM_PROVIDER", "openrouter").lower()
-    logger.info(f"Selected LLM Provider: {provider}")
-
-    if provider == "groq":
-        ModelClass = Groq
-        team_model_id = os.environ.get(
-            "GROQ_TEAM_MODEL_ID", "deepseek-r1-distill-llama-70b"
-        )
-        agent_model_id = os.environ.get("GROQ_AGENT_MODEL_ID", "qwen-2.5-32b")
-        logger.info(
-            f"Using Groq: Team Model='{team_model_id}', Agent Model='{agent_model_id}'"
-        )
-    elif provider == "openrouter":
-        ModelClass = OpenRouter
-        team_model_id = os.environ.get(
-            "OPENROUTER_TEAM_MODEL_ID", "openai/o4-mini-high"
-        )
-        agent_model_id = os.environ.get("OPENROUTER_AGENT_MODEL_ID", "openai/o3")
-        logger.info(
-            f"Using OpenRouter: Team Model='{team_model_id}', Agent Model='{agent_model_id}'"
-        )
-    else:
-        logger.error(f"Unsupported LLM_PROVIDER: {provider}. Defaulting to OpenRouter.")
-        ModelClass = OpenRouter
-        team_model_id = "deepseek/deepseek-chat-v3-0324:free"
-        agent_model_id = "deepseek/deepseek-r1-0528:free"
-
-    return ModelClass, team_model_id, agent_model_id
-
-
-def create_reflective_thinking_team() -> Team:
-    """
-    Creates and configures the Agno multi-agent team for reflective thinking,
-    using 'coordinate' mode. The Team object itself acts as the coordinator.
-
-    Returns:
-        An initialized Team instance.
-    """
-    try:
-        ModelClass, team_model_id, agent_model_id = get_model_config()
-        team_model_instance = ModelClass(id=team_model_id)
-        agent_model_instance = ModelClass(id=agent_model_id)
-
-    except Exception as e:
-        logger.error(f"Error initializing models: {e}")
-        logger.error(
-            "Please ensure the necessary API keys and configurations are set for the selected provider ({os.environ.get('LLM_PROVIDER', 'deepseek')})."
-        )
-        sys.exit(1)
-
-    # REMOVED the separate Coordinator Agent definition.
-    # The Team object below will handle coordination using its own instructions/model.
-
-    # Agent definitions for specialists
-    planner = Agent(
-        name="Planner",
-        role="Strategic Planner",
-        description="Develops strategic plans and roadmaps based on delegated sub-tasks.",
-        tools=[ThinkingTools()],
-        instructions=[
-            "You are the Strategic Planner specialist.",
-            "You will receive specific sub-tasks from the Team Coordinator related to planning, strategy, or process design.",
-            "**When you receive a sub-task:**",
-            " 1. Understand the specific planning requirement delegated to you.",
-            " 2. Use the `think` tool as a scratchpad if needed to outline your steps or potential non-linear points relevant *to your sub-task*.",
-            " 3. Develop the requested plan, roadmap, or sequence of steps.",
-            " 4. Identify any potential revision/branching points *specifically related to your plan* and note them.",
-            " 5. Consider constraints or potential roadblocks relevant to your assigned task.",
-            " 6. Formulate a clear and concise response containing the requested planning output.",
-            " 7. Return your response to the Team Coordinator.",
-            "Focus on fulfilling the delegated planning sub-task accurately and efficiently.",
-        ],
-        model=agent_model_instance,  # Use the designated agent model
-        add_datetime_to_instructions=True,
-        markdown=True,
-    )
-
-    researcher = Agent(
-        name="Researcher",
-        role="Information Gatherer",
-        description="Gathers and validates information based on delegated research sub-tasks.",
-        tools=[ThinkingTools(), ExaTools()],
-        instructions=[
-            "You are the Information Gatherer specialist.",
-            "You will receive specific sub-tasks from the Team Coordinator requiring information gathering or verification.",
-            "**When you receive a sub-task:**",
-            " 1. Identify the specific information requested in the delegated task.",
-            " 2. Use your tools (like Exa) to find relevant facts, data, or context. Use the `think` tool to plan queries or structure findings if needed.",
-            " 3. Validate information where possible.",
-            " 4. Structure your findings clearly.",
-            " 5. Note any significant information gaps encountered during your research for the specific sub-task.",
-            " 6. Formulate a response containing the research findings relevant to the sub-task.",
-            " 7. Return your response to the Team Coordinator.",
-            "Focus on accuracy and relevance for the delegated research request.",
-        ],
-        model=agent_model_instance,  # Use the designated agent model
-        add_datetime_to_instructions=True,
-        markdown=True,
-    )
-
-    analyzer = Agent(
-        name="Analyzer",
-        role="Core Analyst",
-        description="Performs analysis based on delegated analytical sub-tasks.",
-        tools=[ThinkingTools()],
-        instructions=[
-            "You are the Core Analyst specialist.",
-            "You will receive specific sub-tasks from the Team Coordinator requiring analysis, pattern identification, or logical evaluation.",
-            "**When you receive a sub-task:**",
-            " 1. Understand the specific analytical requirement of the delegated task.",
-            " 2. Use the `think` tool as a scratchpad if needed to outline your analysis framework or draft insights related *to your sub-task*.",
-            " 3. Perform the requested analysis (e.g., break down components, identify patterns, evaluate logic).",
-            " 4. Generate concise insights based on your analysis of the sub-task.",
-            " 5. Based on your analysis, identify any significant logical inconsistencies or invalidated premises *within the scope of your sub-task* that you should highlight in your response.",
-            " 6. Formulate a response containing your analytical findings and insights.",
-            " 7. Return your response to the Team Coordinator.",
-            "Focus on depth and clarity for the delegated analytical task.",
-        ],
-        model=agent_model_instance,  # Use the designated agent model
-        add_datetime_to_instructions=True,
-        markdown=True,
-    )
-
-    critic = Agent(
-        name="Critic",
-        role="Quality Controller",
-        description="Critically evaluates ideas or assumptions based on delegated critique sub-tasks.",
-        tools=[ThinkingTools()],
-        instructions=[
-            "You are the Quality Controller specialist.",
-            "You will receive specific sub-tasks from the Team Coordinator requiring critique, evaluation of assumptions, or identification of flaws.",
-            "**When you receive a sub-task:**",
-            " 1. Understand the specific aspect requiring critique in the delegated task.",
-            " 2. Use the `think` tool as a scratchpad if needed to list assumptions or potential weaknesses related *to your sub-task*.",
-            " 3. Critically evaluate the provided information or premise as requested.",
-            " 4. Identify potential biases, flaws, or logical fallacies within the scope of the sub-task.",
-            " 5. Suggest specific improvements or point out weaknesses constructively.",
-            " 6. If your critique reveals significant flaws or outdated assumptions *within the scope of your sub-task*, highlight this clearly in your response.",
-            " 7. Formulate a response containing your critical evaluation and recommendations.",
-            " 8. Return your response to the Team Coordinator.",
-            "Focus on rigorous and constructive critique for the delegated evaluation task.",
-        ],
-        model=agent_model_instance,  # Use the designated agent model
-        add_datetime_to_instructions=True,
-        markdown=True,
-    )
-
-    synthesizer = Agent(
-        name="Synthesizer",
-        role="Integration Specialist",
-        description="Integrates information or forms conclusions based on delegated synthesis sub-tasks.",
-        tools=[ThinkingTools()],
-        instructions=[
-            "You are the Integration Specialist.",
-            "You will receive specific sub-tasks from the Team Coordinator requiring integration of information, synthesis of ideas, or formation of conclusions.",
-            "**When you receive a sub-task:**",
-            " 1. Understand the specific elements needing integration or synthesis in the delegated task.",
-            " 2. Use the `think` tool as a scratchpad if needed to outline connections or draft conclusions related *to your sub-task*.",
-            " 3. Connect the provided elements, identify overarching themes, or draw conclusions as requested.",
-            " 4. Distill complex inputs into clear, structured insights for the sub-task.",
-            " 5. Formulate a response presenting the synthesized information or conclusions.",
-            " 6. Return your response to the Team Coordinator.",
-            "Focus on creating clarity and coherence for the delegated synthesis task.",
-            "**For the final synthesis task provided by the Coordinator:** Aim for a concise and high-level integration. Focus on the core synthesized understanding and key takeaways, rather than detailing the step-by-step process or extensive analysis of each component.",
-        ],
-        model=agent_model_instance,  # Use the designated agent model
-        add_datetime_to_instructions=True,
-        markdown=True,
-    )
-
-    # Create the team with coordinate mode.
-    # The Team object itself acts as the coordinator, using the instructions/description/model provided here.
-    team = Team(
-        name="SequentialThinkingTeam",
-        mode="coordinate",
-        members=[
-            planner,
-            researcher,
-            analyzer,
-            critic,
-            synthesizer,
-        ],  # ONLY specialist agents
-        model=team_model_instance,  # Model for the Team's coordination logic
-        description="You are the Coordinator of a specialist team processing reflective thoughts. Your role is to manage the flow, delegate tasks, and synthesize results.",
-        instructions=[
-            "You are the Coordinator managing a team of specialists (Planner, Researcher, Analyzer, Critic, Synthesizer) in 'coordinate' mode.",
-            "Your core responsibilities when receiving an input thought:",
-            " 1. Analyze the input thought, considering its type (e.g., initial planning, analysis, revision, branch).",
-            " 2. Break the thought down into specific, actionable sub-tasks suitable for your specialist team members.",
-            " 3. Determine the MINIMUM set of specialists required to address the thought comprehensively.",
-            " 4. Delegate the appropriate sub-task(s) ONLY to the essential specialists identified. Provide clear instructions and necessary context (like previous thought content if revising/branching) for each sub-task.",
-            " 5. Await responses from the delegated specialist(s).",
-            " 6. Synthesize the responses from the specialist(s) into a single, cohesive, and comprehensive response addressing the original input thought.",
-            " 7. Based on the synthesis and specialist feedback, identify potential needs for revision of previous thoughts or branching to explore alternatives.",
-            " 8. Include clear recommendations in your final synthesized response if revision or branching is needed. Use formats like 'RECOMMENDATION: Revise thought #X...' or 'SUGGESTION: Consider branching from thought #Y...'.",
-            " 9. Ensure the final synthesized response directly addresses the initial input thought and provides necessary guidance for the next step in the sequence.",
-            "Delegation Criteria:",
-            " - Choose specialists based on the primary actions implied by the thought (planning, research, analysis, critique, synthesis).",
-            " - **Prioritize Efficiency:** Delegate sub-tasks only to specialists whose expertise is *strictly necessary*. Aim to minimize concurrent delegations.",
-            " - Provide context: Include relevant parts of the input thought or previous context when delegating.",
-            "Synthesis:",
-            " - Integrate specialist responses logically.",
-            " - Resolve conflicts or highlight discrepancies.",
-            " - Formulate a final answer representing the combined effort.",
-            "Remember: Orchestrate the team effectively and efficiently.",
-        ],
-        success_criteria="Break down input thoughts into appropriate sub-tasks, delegate efficiently to specialists, synthesize responses into cohesive output",
-        enable_agentic_context=False,  # Allows context sharing managed by the Team (coordinator)
-        share_member_interactions=False,  # Allows members' interactions to be shared
-        markdown=True,
-        debug_mode=False,
-        add_datetime_to_instructions=True,
-    )
-
-    return team
-
-
-# --- Application Context and Lifespan Management ---
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 @dataclass
-class AppContext:
-    """Holds shared application resources, like the Agno team."""
+class ErrorContext:
+    """Context information for error handling."""
 
-    team: Team
-    thought_history: List[ThoughtData] = field(default_factory=list)
-    branches: Dict[str, List[ThoughtData]] = field(default_factory=dict)
+    error_type: ErrorType
+    severity: ErrorSeverity
+    message: str
+    timestamp: datetime
+    thought_number: Optional[int] = None
+    recovery_attempted: bool = False
+    additional_info: Dict[str, Any] = field(default_factory=dict)
 
-    def add_thought(self, thought: ThoughtData) -> None:
-        """Add a thought to history and manage branches"""
-        self.thought_history.append(thought)
 
-        # Handle branching
-        if thought.branchFromThought is not None and thought.branchId is not None:
-            if thought.branchId not in self.branches:
-                self.branches[thought.branchId] = []
-            self.branches[thought.branchId].append(thought)
+class CircuitBreaker:
+    """Circuit breaker pattern to prevent cascade failures."""
 
-    def get_branch_thoughts(self, branch_id: str) -> List[ThoughtData]:
-        """Get all thoughts in a specific branch"""
-        return self.branches.get(branch_id, [])
+    def __init__(self, failure_threshold: int = 3, recovery_timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time: Optional[datetime] = None
+        self.is_open = False
 
-    def get_all_branches(self) -> Dict[str, int]:
-        """Get all branch IDs and their thought counts"""
-        return {
-            branch_id: len(thoughts) for branch_id, thoughts in self.branches.items()
+    def record_success(self):
+        """Record successful operation."""
+        self.failure_count = 0
+        self.is_open = False
+
+    def record_failure(self):
+        """Record failed operation and potentially open circuit."""
+        self.failure_count += 1
+        self.last_failure_time = datetime.now()
+
+        if self.failure_count >= self.failure_threshold:
+            self.is_open = True
+            logger.warning(
+                f"Circuit breaker opened after {self.failure_count} failures"
+            )
+
+    def can_proceed(self) -> bool:
+        """Check if operation can proceed."""
+        if not self.is_open:
+            return True
+
+        # Check if recovery timeout has passed
+        if self.last_failure_time:
+            time_since_failure = (datetime.now() - self.last_failure_time).seconds
+            if time_since_failure > self.recovery_timeout:
+                self.is_open = False
+                self.failure_count = 0
+                logger.info("Circuit breaker closed after recovery timeout")
+                return True
+
+        return False
+
+
+class EnhancedErrorHandler:
+    """Comprehensive error handling with recovery strategies."""
+
+    def __init__(self):
+        self.error_history: List[ErrorContext] = []
+        self.circuit_breakers: Dict[str, CircuitBreaker] = {
+            "team_processing": CircuitBreaker(),
+            "model_communication": CircuitBreaker(),
         }
 
+    def handle_error(
+        self,
+        error: Exception,
+        error_type: ErrorType,
+        thought_number: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """
+        Handle errors with appropriate recovery strategies.
 
-app_context: Optional[AppContext] = None
+        Returns:
+            Recovery message or None if unrecoverable
+        """
+        severity = self._assess_severity(error, error_type)
+
+        error_context = ErrorContext(
+            error_type=error_type,
+            severity=severity,
+            message=str(error),
+            timestamp=datetime.now(),
+            thought_number=thought_number,
+            additional_info=context or {},
+        )
+
+        self.error_history.append(error_context)
+
+        # Log error with appropriate level
+        if severity == ErrorSeverity.CRITICAL:
+            logger.error(f"Critical error: {error_context}")
+        elif severity == ErrorSeverity.HIGH:
+            logger.error(f"High severity error: {error_context}")
+        else:
+            logger.warning(f"Error occurred: {error_context}")
+
+        # Apply recovery strategy
+        recovery_message = self._apply_recovery_strategy(error_context)
+
+        if recovery_message:
+            error_context.recovery_attempted = True
+
+        return recovery_message
+
+    def _assess_severity(
+        self, error: Exception, error_type: ErrorType
+    ) -> ErrorSeverity:
+        """Assess error severity based on type and content."""
+        if isinstance(error, ValidationError):
+            return ErrorSeverity.LOW
+        elif error_type == ErrorType.TEAM_INITIALIZATION:
+            return ErrorSeverity.CRITICAL
+        elif error_type == ErrorType.MODEL_COMMUNICATION:
+            return ErrorSeverity.HIGH
+        elif "token" in str(error).lower() or "api" in str(error).lower():
+            return ErrorSeverity.HIGH
+        else:
+            return ErrorSeverity.MEDIUM
+
+    def _apply_recovery_strategy(self, error_context: ErrorContext) -> Optional[str]:
+        """Apply appropriate recovery strategy based on error type."""
+        if error_context.error_type == ErrorType.VALIDATION_ERROR:
+            return "Input validation failed. Please check the format and try again."
+
+        elif error_context.error_type == ErrorType.TEAM_PROCESSING:
+            breaker = self.circuit_breakers.get("team_processing")
+            if breaker and not breaker.can_proceed():
+                return (
+                    "Team processing temporarily unavailable. Please try again later."
+                )
+            return "Team processing error. Attempting with reduced complexity."
+
+        elif error_context.error_type == ErrorType.MODEL_COMMUNICATION:
+            breaker = self.circuit_breakers.get("model_communication")
+            if breaker and not breaker.can_proceed():
+                return "Model communication temporarily unavailable. Please try again later."
+            return "Communication error with AI model. Retrying with fallback settings."
+
+        elif error_context.error_type == ErrorType.TOOL_SELECTION_ERROR:
+            return (
+                "Tool selection failed. Proceeding with default tool recommendations."
+            )
+
+        return None
+
+    def get_error_summary(self) -> Dict[str, Any]:
+        """Get summary of error history."""
+        if not self.error_history:
+            return {"total_errors": 0}
+
+        summary = {
+            "total_errors": len(self.error_history),
+            "by_type": {},
+            "by_severity": {},
+            "recent_errors": [],
+        }
+
+        for error in self.error_history:
+            # Count by type
+            error_type_str = error.error_type.value
+            summary["by_type"][error_type_str] = (
+                summary["by_type"].get(error_type_str, 0) + 1
+            )
+
+            # Count by severity
+            severity_str = error.severity.value
+            summary["by_severity"][severity_str] = (
+                summary["by_severity"].get(severity_str, 0) + 1
+            )
+
+        # Recent errors
+        summary["recent_errors"] = [
+            {
+                "type": err.error_type.value,
+                "message": err.message,
+                "timestamp": err.timestamp.isoformat(),
+            }
+            for err in self.error_history[-5:]
+        ]
+
+        return summary
 
 
-@asynccontextmanager
-async def app_lifespan() -> AsyncIterator[None]:
-    """Manages the application lifecycle."""
-    global app_context
-    logger.info("Initializing application resources (Coordinate Mode)...")
-    try:
-        team = create_reflective_thinking_team()
-        app_context = AppContext(team=team)
-        provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
+class EnhancedAppContext:
+    """
+    Enhanced application context managing teams, models, and shared state.
+    Includes tool selection capabilities and comprehensive error handling.
+    """
+
+    def __init__(self):
+        """Initialize the enhanced application context with all components."""
+        self.session_id = str(uuid.uuid4())
+        self.start_time = datetime.now()
+
+        # Initialize components
+        self.shared_context = SharedContext()  # Simple in-memory context
+        self.error_handler = EnhancedErrorHandler()
+        self.tool_selector = ToolSelector()
+
+        # Session context
+        self.session_context = SessionContext(
+            session_id=self.session_id,
+            available_tools=["ThinkingTools", "ExaTools"],
+            session_topic="Reflective Thinking Session",
+            session_domain=DomainType.GENERAL,
+        )
+
+        # Initialize provider and models
+        try:
+            self.provider_config = LLMProviderFactory.get_provider_config()
+            self.provider_initialized = True
+            logger.info(f"Initialized provider: {self.provider_config.provider_name}")
+        except Exception as e:
+            self.provider_initialized = False
+            error_msg = self.error_handler.handle_error(
+                e, ErrorType.TEAM_INITIALIZATION, context={"component": "provider"}
+            )
+            logger.error(f"Failed to initialize provider: {error_msg}")
+            raise
+
+        # Initialize teams
+        self.primary_team: Optional[Team] = None
+        self.reflection_team: Optional[Team] = None
+        self.teams_initialized = False
+
+        # Thought tracking
+        self.thought_history: List[ThoughtData] = []
+        self.branches: Dict[str, List[ThoughtData]] = {}
+
+        # Available MCP tools tracking
+        self.available_mcp_tools: List[str] = []
+
         logger.info(
-            f"Agno team initialized in coordinate mode using provider: {provider}."
+            f"Enhanced app context initialized with session ID: {self.session_id}"
         )
-    except Exception as e:
-        logger.critical(
-            f"Failed to initialize Agno team during lifespan setup: {e}", exc_info=True
+
+    async def initialize_teams(self):
+        """Initialize both primary and reflection teams asynchronously."""
+        if self.teams_initialized:
+            return
+
+        try:
+            # Get model configurations
+            team_model_id, agent_model_id = self.provider_config.get_models()
+            team_model = self.provider_config.create_model_instance(team_model_id)
+            agent_model = self.provider_config.create_model_instance(agent_model_id)
+
+            # Create primary thinking team
+            self.primary_team = await self._create_primary_team(team_model, agent_model)
+
+            # Create reflection team
+            self.reflection_team = await self._create_reflection_team(
+                team_model, agent_model
+            )
+
+            self.teams_initialized = True
+            logger.info("Both teams initialized successfully")
+
+        except Exception as e:
+            error_msg = self.error_handler.handle_error(
+                e, ErrorType.TEAM_INITIALIZATION, context={"stage": "team_creation"}
+            )
+            logger.error(f"Team initialization failed: {error_msg}")
+            raise
+
+    def _generate_adaptive_coordinator_instructions(self) -> List[str]:
+        """Generate context-aware coordinator instructions."""
+        base_instructions = [
+            "🎯 **PRIMARY THINKING TEAM COORDINATOR**",
+            "You orchestrate a team of specialists to process reflective thoughts with precision and intelligence.",
+        ]
+
+        # Add context-specific instructions
+        if self.thought_history:
+            recent_domains = [t.domain for t in self.thought_history[-3:]]
+            if all(d == DomainType.TECHNICAL for d in recent_domains):
+                base_instructions.append(
+                    "Focus on technical accuracy and implementation details."
+                )
+            elif all(d == DomainType.CREATIVE for d in recent_domains):
+                base_instructions.append(
+                    "Emphasize creative solutions and innovative approaches."
+                )
+
+        # Add performance-based adjustments
+        perf_summary = asyncio.run(self.shared_context.get_performance_summary())
+        if perf_summary and "processing_time" in perf_summary:
+            avg_time = perf_summary["processing_time"].get("mean", 0)
+            if avg_time > 3000:  # If average processing > 3 seconds
+                base_instructions.append(
+                    "Optimize for efficiency while maintaining quality."
+                )
+
+        base_instructions.extend(
+            [
+                "",
+                "**Team Coordination Process:**",
+                "1. Receive and understand the thought's intent and context",
+                "2. Delegate specific aspects to appropriate team members",
+                "3. Synthesize all specialist responses into cohesive guidance",
+                "4. Ensure responses are actionable and contextually relevant",
+                "",
+                "**Key Principles:**",
+                "- Adaptive thinking based on thought complexity and domain",
+                "- Clear, actionable synthesis of specialist insights",
+                "- Context awareness across thought sequences and branches",
+                "- Quality over speed, but mindful of efficiency",
+            ]
         )
-        # Decide how to handle this - re-raise, exit, or continue without a team?
-        # For now, re-raise to prevent server starting in a broken state.
-        raise e
+
+        return base_instructions
+
+    def _generate_planner_instructions(
+        self, thought_data: Optional[ThoughtData] = None
+    ) -> str:
+        """Generate adaptive planner instructions based on context."""
+        base_prompt = "You are the Strategic Planner in the thinking team."
+
+        if thought_data:
+            if thought_data.isRevision:
+                base_prompt += (
+                    " Focus on revising the previous strategy based on new insights."
+                )
+            elif thought_data.branchFromThought:
+                base_prompt += " Develop an alternative strategic path for this branch."
+            elif thought_data.thoughtNumber == 1:
+                base_prompt += (
+                    " Create the initial strategic framework for this thinking process."
+                )
+            elif thought_data.needsMoreThoughts:
+                base_prompt += (
+                    " Extend the strategic plan to accommodate additional analysis."
+                )
+
+        base_prompt += """
+        Your responsibilities:
+        - Develop strategic approaches tailored to the current thought
+        - Identify key milestones and decision points
+        - Anticipate potential challenges and opportunities
+        - Provide clear direction for the team's efforts
+        """
+
+        return base_prompt
+
+    def _generate_researcher_instructions(
+        self, thought_data: Optional[ThoughtData] = None
+    ) -> str:
+        """Generate adaptive researcher instructions based on context."""
+        base_prompt = "You are the Information Researcher in the thinking team."
+
+        if thought_data and thought_data.keywords:
+            keywords_str = ", ".join(thought_data.keywords[:5])
+            base_prompt += f" Focus your research on: {keywords_str}."
+
+        base_prompt += """
+        Your responsibilities:
+        - Gather relevant information and context
+        - Identify key facts, patterns, and relationships
+        - Highlight important discoveries and insights
+        - Provide evidence-based support for analysis
+        """
+
+        return base_prompt
+
+    async def _create_primary_team(self, team_model, agent_model) -> Team:
+        """Create the primary thinking team with specialized agents."""
+        planner = Agent(
+            name="Planner",
+            role="Strategic Planner",
+            instructions=self._generate_planner_instructions(),
+            model=agent_model,
+            tools=[ThinkingTools()],
+        )
+
+        researcher = Agent(
+            name="Researcher",
+            role="Information Gatherer",
+            instructions=self._generate_researcher_instructions(),
+            model=agent_model,
+            tools=[ExaTools()],
+        )
+
+        analyzer = Agent(
+            name="Analyzer",
+            role="Core Analyst",
+            instructions="""You are the Core Analyst in the thinking team.
+            Your responsibilities:
+            - Perform deep analysis of the current thought
+            - Identify patterns, relationships, and implications
+            - Break down complex problems into components
+            - Provide structured analytical insights
+            - Recommend appropriate tools for the current step
+            """,
+            model=agent_model,
+            tools=[ThinkingTools()],
+        )
+
+        critic = Agent(
+            name="Critic",
+            role="Quality Controller",
+            instructions="""You are the Critical Reviewer in the thinking team.
+            Your responsibilities:
+            - Identify potential flaws or gaps in reasoning
+            - Challenge assumptions constructively
+            - Ensure logical consistency
+            - Suggest improvements and alternatives
+            - Validate tool recommendations
+            """,
+            model=agent_model,
+        )
+
+        synthesizer = Agent(
+            name="Synthesizer",
+            role="Integration Specialist",
+            instructions="""You are the Integration Specialist in the thinking team.
+            Your responsibilities:
+            - Integrate insights from all team members
+            - Create coherent summaries
+            - Identify emergent patterns
+            - Formulate actionable conclusions
+            - Prioritize tool recommendations
+            """,
+            model=agent_model,
+        )
+
+        team = Team(
+            name="PrimaryThinkingTeam",
+            members=[planner, researcher, analyzer, critic, synthesizer],
+            instructions=self._generate_adaptive_coordinator_instructions(),
+        )
+
+        # Run the team to ensure it's properly initialized
+        await team.arun("Team initialization check")
+
+        return team
+
+    async def _create_reflection_team(self, team_model, agent_model) -> Team:
+        """Create the reflection team for meta-analysis."""
+        meta_analyzer = Agent(
+            name="MetaAnalyzer",
+            role="Thinking Process Analyst",
+            instructions="""You are the Meta-Analyzer in the reflection team.
+            Your responsibilities:
+            - Analyze the thinking process itself
+            - Identify cognitive biases or blind spots
+            - Evaluate the quality of reasoning
+            - Suggest process improvements
+            - Assess tool selection effectiveness
+            """,
+            model=agent_model,
+        )
+
+        pattern_recognizer = Agent(
+            name="PatternRecognizer",
+            role="Pattern Detection Specialist",
+            instructions="""You are the Pattern Recognition Specialist.
+            Your responsibilities:
+            - Identify recurring patterns in thought sequences
+            - Detect successful problem-solving strategies
+            - Recognize inefficient thinking loops
+            - Suggest pattern-based optimizations
+            - Evaluate tool usage patterns
+            """,
+            model=agent_model,
+        )
+
+        quality_assessor = Agent(
+            name="QualityAssessor",
+            role="Quality Evaluator",
+            instructions="""You are the Quality Assessment Specialist.
+            Your responsibilities:
+            - Evaluate response completeness and accuracy
+            - Assess clarity and coherence of thinking
+            - Check alignment with original objectives
+            - Rate confidence in conclusions
+            - Validate tool recommendation quality
+            """,
+            model=agent_model,
+        )
+
+        decision_critic = Agent(
+            name="DecisionCritic",
+            role="Decision Process Analyst",
+            instructions="""You are the Decision Process Critic.
+            Your responsibilities:
+            - Review decision-making logic
+            - Evaluate tool selection decisions
+            - Assess risk-benefit trade-offs
+            - Identify decision-making biases
+            - Suggest decision improvements
+            """,
+            model=agent_model,
+        )
+
+        team = Team(
+            name="ReflectionTeam",
+            members=[
+                meta_analyzer,
+                pattern_recognizer,
+                quality_assessor,
+                decision_critic,
+            ],
+            instructions=[
+                "🔍 **REFLECTION TEAM COORDINATOR**",
+                "You lead a team that provides meta-analysis of the thinking process.",
+                "",
+                "**Your Mission:**",
+                "- Analyze HOW the thinking is being done, not just WHAT",
+                "- Identify strengths and weaknesses in the approach",
+                "- Suggest improvements for future thinking steps",
+                "- Ensure quality and completeness of analysis",
+                "- Evaluate tool selection and usage effectiveness",
+                "",
+                "Synthesize your team's insights into actionable feedback.",
+            ],
+        )
+
+        # Run the team to ensure it's properly initialized
+        await team.arun("Reflection team initialization check")
+
+        return team
+
+    async def add_thought(self, thought_data: ThoughtData):
+        """Add a thought to the context and update tracking."""
+        self.thought_history.append(thought_data)
+
+        # Update shared context
+        await self.shared_context.update_from_thought(thought_data)
+
+        # Track branches
+        if thought_data.branchFromThought and thought_data.branchId:
+            if thought_data.branchId not in self.branches:
+                self.branches[thought_data.branchId] = []
+            self.branches[thought_data.branchId].append(thought_data)
+
+        # Update session context
+        if (
+            thought_data.topic
+            and thought_data.topic != self.session_context.session_topic
+        ):
+            self.session_context.session_topic = thought_data.topic
+
+        if thought_data.domain != self.session_context.session_domain:
+            self.session_context.session_domain = thought_data.domain
+
+    async def get_relevant_context(self, thought: str) -> Dict[str, Any]:
+        """Get context relevant to the current thought."""
+        return await self.shared_context.get_relevant_context(thought)
+
+    async def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get performance metrics for the session."""
+        perf_summary = await self.shared_context.get_performance_summary()
+        error_summary = self.error_handler.get_error_summary()
+
+        return {
+            "session_id": self.session_id,
+            "duration_seconds": (datetime.now() - self.start_time).total_seconds(),
+            "total_thoughts": len(self.thought_history),
+            "total_branches": len(self.branches),
+            "performance": perf_summary,
+            "errors": error_summary,
+            "memory_usage": self.shared_context.get_memory_usage(),
+        }
+
+    def update_available_tools(self, tools: List[str]):
+        """Update the list of available MCP tools."""
+        self.available_mcp_tools = tools
+        self.session_context.available_tools = tools
+        logger.info(f"Updated available tools: {tools}")
+
+    def cleanup(self):
+        """Cleanup resources."""
+        self.shared_context.clear()
+        logger.info("Enhanced app context cleaned up")
+
+
+# Global app context
+app_context = EnhancedAppContext()
+
+# Create FastMCP server
+mcp = FastMCP("reflective-thinking-tools")
+
+
+async def process_thought_with_dual_teams(
+    thought_data: ThoughtData, context: EnhancedAppContext
+) -> ProcessedThought:
+    """
+    Process a thought through both primary and reflection teams.
+    Includes comprehensive error handling and performance tracking.
+    """
+    start_time = time.time()
 
     try:
-        yield
-    finally:
-        logger.info("Shutting down application resources...")
-        app_context = None
+        # Ensure teams are initialized
+        if not context.teams_initialized:
+            await context.initialize_teams()
+
+        # Update shared context
+        await context.add_thought(thought_data)
+
+        # Get relevant context
+        relevant_context = await context.get_relevant_context(thought_data.thought)
+
+        # Generate tool recommendations if not provided
+        if not thought_data.current_step:
+            try:
+                tool_recommendation = context.tool_selector.recommend_tools(
+                    thought_data, context.available_mcp_tools
+                )
+                thought_data.current_step = tool_recommendation
+            except Exception as e:
+                logger.warning(f"Tool selection failed: {e}")
+                # Continue without tool recommendations
+
+        # Prepare input for primary team
+        primary_input = f"""
+Thought #{thought_data.thoughtNumber}/{thought_data.totalThoughts}
+Topic: {thought_data.topic or "General"}
+Domain: {thought_data.domain.value}
+
+Current Thought: {thought_data.thought}
+
+Context:
+- Is Revision: {thought_data.isRevision}
+- Branch ID: {thought_data.branchId or "main"}
+- Confidence: {thought_data.confidence_score}
+
+Relevant Context:
+{json.dumps(relevant_context, indent=2)}
+
+Tool Recommendations:
+{thought_data.current_step.model_dump_json(indent=2) if thought_data.current_step else "None"}
+
+Please analyze this thought and provide comprehensive guidance.
+"""
+
+        # Process with primary team
+        primary_response = None
+        try:
+            if context.primary_team:
+                primary_response = await context.primary_team.arun(primary_input)
+                context.error_handler.circuit_breakers[
+                    "team_processing"
+                ].record_success()
+            else:
+                raise Exception("Primary team not initialized")
+        except Exception as e:
+            context.error_handler.circuit_breakers["team_processing"].record_failure()
+            error_msg = context.error_handler.handle_error(
+                e,
+                ErrorType.TEAM_PROCESSING,
+                thought_data.thoughtNumber,
+                {"team": "primary", "input_length": len(primary_input)},
+            )
+            logger.error(f"Primary team processing failed: {error_msg}")
+            primary_response = f"Primary team error: {error_msg}"
+
+        # Prepare input for reflection team
+        reflection_input = f"""
+Primary Team Response:
+{primary_response}
+
+Original Thought: {thought_data.thought}
+Thought Number: {thought_data.thoughtNumber}
+
+Please provide meta-analysis of:
+1. Quality of the thinking process
+2. Potential biases or gaps
+3. Tool selection effectiveness
+4. Suggestions for improvement
+"""
+
+        # Process with reflection team
+        reflection_response = None
+        try:
+            if context.reflection_team:
+                reflection_response = await context.reflection_team.arun(
+                    reflection_input
+                )
+                context.error_handler.circuit_breakers[
+                    "team_processing"
+                ].record_success()
+            else:
+                raise Exception("Reflection team not initialized")
+        except Exception as e:
+            context.error_handler.circuit_breakers["team_processing"].record_failure()
+            error_msg = context.error_handler.handle_error(
+                e,
+                ErrorType.TEAM_PROCESSING,
+                thought_data.thoughtNumber,
+                {"team": "reflection", "input_length": len(reflection_input)},
+            )
+            logger.error(f"Reflection team processing failed: {error_msg}")
+            reflection_response = f"Reflection team error: {error_msg}"
+
+        # Extract content from responses
+        primary_content = ""
+        reflection_content = ""
+
+        if primary_response:
+            if isinstance(primary_response, str):
+                primary_content = primary_response
+            elif hasattr(primary_response, "content"):
+                primary_content = str(primary_response.content)
+            else:
+                primary_content = str(primary_response)
+
+        if reflection_response:
+            if isinstance(reflection_response, str):
+                reflection_content = reflection_response
+            elif hasattr(reflection_response, "content"):
+                reflection_content = str(reflection_response.content)
+            else:
+                reflection_content = str(reflection_response)
+
+        # Integrate responses
+        integrated_response = f"""
+## Primary Analysis
+{primary_content}
+
+## Reflection & Meta-Analysis
+{reflection_content}
+
+## Integrated Guidance
+Based on both analyses, the recommended approach is to proceed with the insights from the primary team while incorporating the meta-level improvements suggested by the reflection team.
+"""
+
+        # Calculate execution time
+        execution_time = int((time.time() - start_time) * 1000)
+
+        # Record performance
+        await context.shared_context.record_performance(
+            "processing_time", execution_time
+        )
+
+        # Record tool effectiveness if tools were used
+        if thought_data.current_step and thought_data.current_step.recommended_tools:
+            # Simple effectiveness based on response quality
+            effectiveness = 0.8 if "error" not in integrated_response.lower() else 0.4
+            for tool_rec in thought_data.current_step.recommended_tools:
+                context.tool_selector.record_tool_effectiveness(
+                    tool_rec.tool_name, effectiveness
+                )
+
+        # Create processed thought
+        return ProcessedThought(
+            thought_data=thought_data,
+            coordinator_response=primary_content or "",
+            reflection_response=reflection_content or "",
+            integrated_response=integrated_response,
+            next_step_guidance="Continue with the next thought based on the integrated guidance above.",
+            execution_time_ms=execution_time,
+            token_usage={
+                "primary": len(primary_content.split()) if primary_content else 0,
+                "reflection": len(reflection_content.split())
+                if reflection_content
+                else 0,
+            },
+            success=True,
+            tool_recommendations_generated=bool(thought_data.current_step),
+            reflection_applied=True,
+            context_updated=True,
+        )
+
+    except Exception as e:
+        # Handle unexpected errors
+        error_msg = context.error_handler.handle_error(
+            e,
+            ErrorType.TEAM_PROCESSING,
+            thought_data.thoughtNumber,
+            {"phase": "integration"},
+        )
+        logger.error(f"Thought processing failed completely: {error_msg}")
+
+        return ProcessedThought(
+            thought_data=thought_data,
+            coordinator_response="",
+            reflection_response="",
+            integrated_response=f"Processing failed: {error_msg}",
+            next_step_guidance="Please retry with a simpler thought or check the system status.",
+            execution_time_ms=int((time.time() - start_time) * 1000),
+            token_usage={},
+            success=False,
+            error=str(e),
+            tool_recommendations_generated=False,
+            reflection_applied=False,
+            context_updated=False,
+        )
 
 
-# Initialize FastMCP
-mcp = FastMCP()
+async def generate_sequence_review(
+    session_id: str, context: EnhancedAppContext
+) -> ThoughtSequenceReview:
+    """Generate a comprehensive review of the thought sequence."""
+    try:
+        # Gather all thoughts
+        all_thoughts = context.thought_history
 
-# --- MCP Handlers ---
+        # Analyze branches
+        branch_analyses = []
+        for branch_id, branch_thoughts in context.branches.items():
+            if branch_thoughts:
+                quality_scores = [t.confidence_score for t in branch_thoughts]
+                avg_quality = (
+                    sum(quality_scores) / len(quality_scores) if quality_scores else 0.5
+                )
 
+                branch_analysis = BranchAnalysis(
+                    branch_id=branch_id,
+                    branch_quality=avg_quality,
+                    thought_count=len(branch_thoughts),
+                    key_insights=[t.thought[:100] for t in branch_thoughts[:3]],
+                    completion_status="completed"
+                    if not branch_thoughts[-1].nextThoughtNeeded
+                    else "ongoing",
+                    recommendation="Continue development"
+                    if avg_quality > 0.7
+                    else "Consider revision",
+                )
+                branch_analyses.append(branch_analysis)
 
-@mcp.prompt("reflective-thinking")
-def reflective_thinking_prompt(problem: str, context: str = ""):
-    """
-    Starter prompt for reflective thinking that ENCOURAGES non-linear exploration
-    using coordinate mode. Returns separate user and assistant messages.
-    """
-    min_thoughts = 5  # Set a reasonable minimum number of initial thoughts
+        # Calculate overall metrics
+        total_thoughts = len(all_thoughts)
+        overall_quality = (
+            sum(t.confidence_score for t in all_thoughts) / total_thoughts
+            if total_thoughts > 0
+            else 0.5
+        )
 
-    user_prompt_text = f"""Initiate a comprehensive reflective thinking process for the following problem:
+        # Extract key insights
+        key_insights = []
+        insights = await asyncio.gather(
+            *[
+                context.shared_context.get_context(f"insight_{i}")
+                for i in range(min(5, total_thoughts))
+            ]
+        )
+        key_insights = [ins for ins in insights if ins]
 
-Problem: {problem}
-{f"Context: {context}" if context else ""}"""
+        # Identify patterns
+        patterns = []
+        if total_thoughts > 3:
+            # Look for revision patterns
+            revision_count = sum(1 for t in all_thoughts if t.isRevision)
+            if revision_count > total_thoughts * 0.3:
+                patterns.append("High revision rate - iterative refinement approach")
 
-    assistant_guidelines = f"""Okay, let's start the reflective thinking process. Here are the guidelines and the process we'll follow using the 'coordinate' mode team:
+            # Look for branching patterns
+            if len(context.branches) > 1:
+                patterns.append(
+                    f"Multiple exploration paths ({len(context.branches)} branches)"
+                )
 
-**Sequential Thinking Goals & Guidelines (Coordinate Mode):**
-
-1.  **Estimate Steps:** Analyze the problem complexity. Your initial `totalThoughts` estimate should be at least {min_thoughts}.
-2.  **First Thought:** Call the 'reflectivethinking' tool with `thoughtNumber: 1`, your estimated `totalThoughts` (at least {min_thoughts}), and `nextThoughtNeeded: True`. Structure your first thought as: "Plan a comprehensive analysis approach for: {problem}"
-3.  **Encouraged Revision:** Actively look for opportunities to revise previous thoughts if you identify flaws, oversights, or necessary refinements based on later analysis (especially from the Coordinator synthesizing Critic/Analyzer outputs). Use `isRevision: True` and `revisesThought: <thought_number>` when performing a revision. Robust thinking often involves self-correction. Look for 'RECOMMENDATION: Revise thought #X...' in the Coordinator's response.
-4.  **Encouraged Branching:** Explore alternative paths, perspectives, or solutions where appropriate. Use `branchFromThought: <thought_number>` and `branchId: <unique_branch_name>` to initiate branches. Exploring alternatives is key to thorough analysis. Consider suggestions for branching proposed by the Coordinator (e.g., 'SUGGESTION: Consider branching...').
-5.  **Extension:** If the analysis requires more steps than initially estimated, use `needsMoreThoughts: True` on the thought *before* you need the extension.
-6.  **Thought Content:** Each thought must:
-    *   Be detailed and specific to the current stage (planning, analysis, critique, synthesis, revision, branching).
-    *   Clearly explain the *reasoning* behind the thought, especially for revisions and branches.
-    *   Conclude by outlining what the *next* thought needs to address to fulfill the overall plan, considering the Coordinator's synthesis and suggestions.
-
-**Process:**
-
-*   The `reflectivethinking` tool will track your progress. The Agno team operates in 'coordinate' mode. The Coordinator agent receives your thought, delegates sub-tasks to specialists (like Analyzer, Critic), and synthesizes their outputs, potentially including recommendations for revision or branching.
-*   Focus on insightful analysis, constructive critique (leading to potential revisions), and creative exploration (leading to potential branching).
-*   Actively reflect on the process. Linear thinking might be insufficient for complex problems.
-
-Proceed with the first thought based on these guidelines."""
-
-    return [
-        {
-            "description": "Starter prompt for non-linear reflective thinking (coordinate mode), providing problem and guidelines separately.",
-            "messages": [
-                {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
-                {
-                    "role": "assistant",
-                    "content": {"type": "text", "text": assistant_guidelines},
-                },
-            ],
+        # Tool effectiveness
+        tool_stats = context.tool_selector.get_tool_statistics()
+        tool_effectiveness = {
+            name: stats.get("avg_effectiveness", 0.5)
+            for name, stats in tool_stats.items()
         }
-    ]
+
+        # Performance metrics (might be used in future enhancements)
+        _ = await context.get_performance_metrics()
+
+        # Determine best branch
+        best_branch = None
+        if branch_analyses:
+            best_branch = max(branch_analyses, key=lambda b: b.branch_quality).branch_id
+
+        # Generate next steps
+        next_steps = []
+        if all_thoughts and all_thoughts[-1].nextThoughtNeeded:
+            next_steps.append("Continue with the next thought in the sequence")
+
+        if any(b.completion_status == "ongoing" for b in branch_analyses):
+            next_steps.append("Complete ongoing branches")
+
+        if overall_quality < 0.6:
+            next_steps.append("Consider revising low-confidence thoughts")
+
+        # Areas for improvement
+        areas_for_improvement = []
+        error_summary = context.error_handler.get_error_summary()
+        if error_summary["total_errors"] > 5:
+            areas_for_improvement.append("Reduce error rate through input validation")
+
+        if tool_effectiveness and min(tool_effectiveness.values()) < 0.5:
+            areas_for_improvement.append("Improve tool selection accuracy")
+
+        # Calculate topic alignment
+        topic_alignment = 0.8  # Default
+        if all_thoughts:
+            topics = [t.topic for t in all_thoughts if t.topic]
+            if topics:
+                # Check topic consistency
+                unique_topics = set(topics)
+                topic_alignment = 1.0 - (len(unique_topics) - 1) / len(topics)
+
+        return ThoughtSequenceReview(
+            session_id=session_id,
+            total_thoughts=total_thoughts,
+            total_branches=len(context.branches),
+            overall_quality=overall_quality,
+            key_insights=key_insights[:5],
+            patterns_identified=patterns,
+            quality_trends={
+                "start": all_thoughts[0].confidence_score if all_thoughts else 0.5,
+                "middle": all_thoughts[total_thoughts // 2].confidence_score
+                if total_thoughts > 1
+                else 0.5,
+                "end": all_thoughts[-1].confidence_score if all_thoughts else 0.5,
+            },
+            tool_effectiveness=tool_effectiveness,
+            branch_analyses=branch_analyses,
+            best_branch=best_branch,
+            next_steps=next_steps,
+            areas_for_improvement=areas_for_improvement,
+            topic_alignment_score=topic_alignment,
+            review_timestamp=int(time.time() * 1000),
+            review_confidence=0.9 if total_thoughts > 5 else 0.7,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to generate sequence review: {e}")
+        # Return minimal review on error
+        return ThoughtSequenceReview(
+            session_id=session_id,
+            total_thoughts=len(context.thought_history),
+            total_branches=len(context.branches),
+            overall_quality=0.5,
+            key_insights=["Review generation failed"],
+            patterns_identified=[],
+            quality_trends={},
+            tool_effectiveness={},
+            branch_analyses=[],
+            best_branch=None,
+            next_steps=["Retry review generation"],
+            areas_for_improvement=["Fix review generation errors"],
+            topic_alignment_score=0.5,
+            review_timestamp=int(time.time() * 1000),
+            review_confidence=0.1,
+        )
 
 
 @mcp.tool()
-async def reflectivethinking(
-    thought: str,
-    thoughtNumber: int,
-    totalThoughts: int,
-    nextThoughtNeeded: bool,
-    isRevision: bool = False,
-    revisesThought: Optional[int] = None,
-    branchFromThought: Optional[int] = None,
-    branchId: Optional[str] = None,
-    needsMoreThoughts: bool = False,
-) -> str:
+async def reflectivethinking(thought_data: ThoughtData) -> str:
     """
-    A detailed tool for dynamic and reflective problem-solving through thoughts.
-
-    This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
-    Each thought can build on, question, or revise previous insights as understanding deepens.
-    It uses an Agno multi-agent team (in coordinate mode) to process each thought, where a
-    Coordinator delegates sub-tasks to specialists (Planner, Researcher, Analyzer, Critic, Synthesizer)
-    and synthesizes their outputs.
-
-    When to use this tool:
-    - Breaking down complex problems into manageable steps.
-    - Planning and design processes requiring iterative refinement and revision.
-    - Complex analysis where the approach might need course correction based on findings.
-    - Problems where the full scope or optimal path is not clear initially.
-    - Situations requiring a multi-step solution with context maintained across steps.
-    - Tasks where focusing on relevant information and filtering out noise is crucial.
-    - Developing and verifying solution hypotheses through a chain of reasoning.
-
-    Key features & usage guidelines:
-    - The process is driven by the caller (e.g., an LLM) making sequential calls to this tool.
-    - Start with an initial estimate for `totalThoughts`, but adjust it dynamically via subsequent calls if needed.
-    - Use `isRevision=True` and `revisesThought` to explicitly revisit and correct previous steps.
-    - Use `branchFromThought` and `branchId` to explore alternative paths or perspectives.
-    - If the estimated `totalThoughts` is reached but more steps are needed, set `needsMoreThoughts=True` on the *last* thought within the current estimate to signal the need for extension.
-    - Express uncertainty and explore alternatives within the `thought` content.
-    - Generate solution hypotheses within the `thought` content when appropriate.
-    - Verify hypotheses in subsequent `thought` steps based on the reasoning chain.
-    - The caller should repeat the process, calling this tool for each step, until a satisfactory solution is reached.
-    - Set `nextThoughtNeeded=False` only when the caller determines the process is complete and a final answer is ready.
-
-    Parameters:
-        thought (str): The content of the current thinking step. This can be an analytical step,
-                       a plan, a question, a critique, a revision, a hypothesis, or verification.
-                       Make it specific enough to imply the desired action.
-        thoughtNumber (int): The sequence number of this thought (>=1). Can exceed initial `totalThoughts`
-                             if the process is extended.
-        totalThoughts (int): The current *estimate* of the total thoughts required for the process.
-                             This can be adjusted by the caller in subsequent calls. Minimum 5 suggested.
-        nextThoughtNeeded (bool): Indicates if the caller intends to make another call to this tool
-                                  after the current one. Set to False only when the entire process is deemed complete.
-        isRevision (bool, optional): True if this thought revises or corrects a previous thought. Defaults to False.
-        revisesThought (int, optional): The `thoughtNumber` of the thought being revised, required if `isRevision` is True.
-                                        Must be less than the current `thoughtNumber`.
-        branchFromThought (int, optional): The `thoughtNumber` from which this thought branches to explore an alternative path.
-                                           Defaults to None.
-        branchId (str, optional): A unique identifier for the branch being explored, required if `branchFromThought` is set.
-                                  Defaults to None.
-        needsMoreThoughts (bool, optional): Set to True on a thought if the caller anticipates needing more
-                                            steps beyond the current `totalThoughts` estimate *after* this thought.
-                                            Defaults to False.
-
-    Returns:
-        str: The Coordinator agent's synthesized response based on specialist contributions for the current `thought`.
-             Includes guidance for the caller on potential next steps (e.g., suggestions for revision or branching
-             based on the specialists' analysis). The caller uses this response to formulate the *next* thought.
+    Enhanced tool for dynamic and reflective problem-solving through sequential thoughts.
+    Includes dual-team processing, tool recommendations, and comprehensive error handling.
     """
-    global app_context
-    if not app_context or not app_context.team:
-        logger.error(
-            "Application context or Agno team not initialized during tool call."
-        )
-        # Attempt re-initialization cautiously, or fail hard.
-        # Let's try re-initialization if app_lifespan wasn't used or failed silently.
-        logger.warning("Attempting to re-initialize team due to missing context...")
-        try:
-            team = create_reflective_thinking_team()
-            app_context = AppContext(team=team)  # Re-create context
-            logger.info("Successfully re-initialized team and context.")
-        except Exception as init_err:
-            logger.critical(
-                f"Failed to re-initialize Agno team during tool call: {init_err}",
-                exc_info=True,
-            )
-            # Return only the error message string
-            return f"Critical Error: Application context not available and re-initialization failed: {init_err}"
-            # Or raise Exception("Critical Error: Application context not available.")
+    logger.info(f"Processing thought #{thought_data.thoughtNumber}")
 
     try:
-        # --- Initial Validation and Adjustments ---
-        # Create ThoughtData instance first - validation happens here
-        current_input_thought = ThoughtData(
-            thought=thought,
-            thoughtNumber=thoughtNumber,
-            totalThoughts=totalThoughts,  # Pydantic validator handles minimum now
-            nextThoughtNeeded=nextThoughtNeeded,
-            isRevision=isRevision,
-            revisesThought=revisesThought,
-            branchFromThought=branchFromThought,
-            branchId=branchId,
-            needsMoreThoughts=needsMoreThoughts,
-        )
+        # Set session context if not already set
+        thought_data.session_context = app_context.session_context
 
-        # Use the validated/adjusted value from the instance
-        adjusted_total_thoughts = current_input_thought.totalThoughts
+        # Process through dual teams
+        result = await process_thought_with_dual_teams(thought_data, app_context)
 
-        # Adjust nextThoughtNeeded based on validated totalThoughts
-        adjusted_next_thought_needed = current_input_thought.nextThoughtNeeded
-        if (
-            current_input_thought.thoughtNumber >= adjusted_total_thoughts
-            and not current_input_thought.needsMoreThoughts
-        ):
-            adjusted_next_thought_needed = False
+        # Build response
+        response_parts = []
 
-        # Re-create or update the instance if nextThoughtNeeded changed
-        # Pydantic models are typically immutable (frozen=True), so create a new one if needed.
-        # Check if adjustment is necessary before creating new object
-        final_thought_data = current_input_thought
-        if adjusted_next_thought_needed != current_input_thought.nextThoughtNeeded:
-            logger.info(
-                f"Adjusting nextThoughtNeeded from {current_input_thought.nextThoughtNeeded} to {adjusted_next_thought_needed} based on thoughtNumber/totalThoughts."
+        # Add main content
+        response_parts.append(result.integrated_response)
+
+        # Add guidance for next steps
+        if thought_data.nextThoughtNeeded:
+            response_parts.append(
+                f"\n## Next Step Guidance\n{result.next_step_guidance}"
             )
-            # Since frozen=True, we need to create a new instance or handle mutability differently.
-            # Easiest here might be to create a mutable copy for this logic if needed,
-            # or pass adjusted_next_thought_needed separately. Let's pass it separately for now.
-            # OR, make the model mutable if this becomes complex.
-            # Let's keep it simple: the logic below uses the adjusted flag directly.
 
-        # --- Logging and History Update ---
-        log_prefix = "--- Received Thought ---"
-        if final_thought_data.isRevision:
-            log_prefix = f"--- Received REVISION Thought (revising #{final_thought_data.revisesThought}) ---"
-        elif final_thought_data.branchFromThought is not None:
-            log_prefix = f"--- Received BRANCH Thought (from #{final_thought_data.branchFromThought}, ID: {final_thought_data.branchId}) ---"
+            # Add tool recommendations for next step if available
+            if thought_data.current_step:
+                response_parts.append("\n## Recommended Tools for Next Step:")
+                for tool in thought_data.current_step.recommended_tools[:3]:
+                    response_parts.append(
+                        f"- **{tool.tool_name}** (confidence: {tool.confidence:.2f}): {tool.rationale}"
+                    )
 
-        # Use the potentially adjusted nextThoughtNeeded in the log format if desired
-        # For simplicity, we log the original input values captured in final_thought_data here.
-        # The functional logic later will use adjusted_next_thought_needed where necessary.
-        formatted_log_thought = format_thought_for_log(final_thought_data)
-        logger.info(f"\n{log_prefix}\n{formatted_log_thought}\n")
+        # Add performance metrics if this is a final thought
+        if not thought_data.nextThoughtNeeded:
+            metrics = await app_context.get_performance_metrics()
+            response_parts.append(
+                f"\n## Session Summary\n"
+                f"- Total thoughts: {metrics['total_thoughts']}\n"
+                f"- Duration: {metrics['duration_seconds']:.1f}s\n"
+                f"- Overall quality: {result.quality_score:.2f}"
+            )
 
-        # Add the *validated* thought to history
-        app_context.add_thought(final_thought_data)
-
-        # --- Process Thought with Team (Coordinate Mode) ---
-        logger.info(
-            f"Passing thought #{final_thought_data.thoughtNumber} to the Coordinator..."
-        )
-
-        # Prepare input for the team coordinator. Pass the core thought content.
-        # Include context about revision/branching directly in the input string for the coordinator.
-        input_prompt = f"Process Thought #{final_thought_data.thoughtNumber}:\n"
-        if (
-            final_thought_data.isRevision
-            and final_thought_data.revisesThought is not None
-        ):
-            # Find the original thought text
-            original_thought_text = "Unknown Original Thought"
-            for hist_thought in app_context.thought_history[:-1]:  # Exclude current one
-                if hist_thought.thoughtNumber == final_thought_data.revisesThought:
-                    original_thought_text = hist_thought.thought
-                    break
-            input_prompt += f'**This is a REVISION of Thought #{final_thought_data.revisesThought}** (Original: "{original_thought_text}").\n'
-        elif (
-            final_thought_data.branchFromThought is not None
-            and final_thought_data.branchId is not None
-        ):
-            # Find the branching point thought text
-            branch_point_text = "Unknown Branch Point"
-            for hist_thought in app_context.thought_history[:-1]:
-                if hist_thought.thoughtNumber == final_thought_data.branchFromThought:
-                    branch_point_text = hist_thought.thought
-                    break
-            input_prompt += f'**This is a BRANCH (ID: {final_thought_data.branchId}) from Thought #{final_thought_data.branchFromThought}** (Origin: "{branch_point_text}").\n'
-
-        input_prompt += f'\nThought Content: "{final_thought_data.thought}"'
-
-        # Call the team's arun method. The coordinator agent will handle it.
-        team_response = await app_context.team.arun(input_prompt)
-
-        # Ensure coordinator_response is a string, default to empty string if None
-        coordinator_response_content = (
-            team_response.content if hasattr(team_response, "content") else None
-        )
-        coordinator_response = (
-            str(coordinator_response_content)
-            if coordinator_response_content is not None
-            else ""
-        )
-
-        logger.info(
-            f"Coordinator finished processing thought #{final_thought_data.thoughtNumber}."
-        )
-        logger.debug(f"Coordinator Raw Response:\n{coordinator_response}")
-
-        # --- Guidance for Next Step (Coordinate Mode) ---
-        additional_guidance = "\n\nGuidance for next step:"  # Initialize
-
-        # Use the *potentially adjusted* flag here for correct guidance
-        if not adjusted_next_thought_needed:
-            # Keep the message for the final thought concise
-            additional_guidance = "\n\nThis is the final thought. Review the Coordinator's final synthesis."
-        else:
-            # Start guidance text for non-final thoughts
-            additional_guidance += "\n- **Revision/Branching:** Look for 'RECOMMENDATION: Revise thought #X...' or 'SUGGESTION: Consider branching...' in the response."
-            additional_guidance += " Use `isRevision=True`/`revisesThought=X` for revisions or `branchFromThought=Y`/`branchId='...'` for branching accordingly."
-            additional_guidance += "\n- **Next Thought:** Based on the Coordinator's response, formulate the next logical thought, addressing any points raised."
-
-        # --- Build Result ---
-        result_data = {
-            "processedThoughtNumber": final_thought_data.thoughtNumber,
-            "estimatedTotalThoughts": final_thought_data.totalThoughts,  # Use validated value
-            "nextThoughtNeeded": adjusted_next_thought_needed,  # Use potentially adjusted value
-            # Ensure both parts are strings before concatenating
-            "coordinatorResponse": coordinator_response + str(additional_guidance),
-            "branches": list(app_context.branches.keys()),
-            "thoughtHistoryLength": len(app_context.thought_history),
-            "branchDetails": {
-                "currentBranchId": final_thought_data.branchId
-                if final_thought_data.branchFromThought is not None
-                else "main",
-                "branchOriginThought": final_thought_data.branchFromThought,
-                "allBranches": app_context.get_all_branches(),  # Include counts
-            },
-            "isRevision": final_thought_data.isRevision,
-            "revisesThought": final_thought_data.revisesThought
-            if final_thought_data.isRevision
-            else None,
-            "isBranch": final_thought_data.branchFromThought is not None,
-            "status": "success",
-        }
-
-        # Return only the coordinatorResponse string
-        return result_data["coordinatorResponse"]
+        return "\n".join(response_parts)
 
     except ValidationError as e:
-        logger.error(f"Validation Error processing tool call: {e}")
-        # Return only the error message string
-        return f"Input validation failed: {e}"
+        error_msg = app_context.error_handler.handle_error(
+            e, ErrorType.VALIDATION_ERROR, thought_data.thoughtNumber
+        )
+        logger.error(f"Validation error: {e}")
+        return f"Validation Error: {error_msg}\n\nDetails: {str(e)}"
+
     except Exception as e:
-        logger.exception("Error processing tool call")  # Log full traceback
-        # Return only the error message string
-        return f"An unexpected error occurred: {str(e)}"
+        error_msg = app_context.error_handler.handle_error(
+            e, ErrorType.TEAM_PROCESSING, thought_data.thoughtNumber
+        )
+        logger.error(f"Unexpected error: {e}")
+        return f"Error: {error_msg}\n\nPlease try again with a simpler thought."
 
 
-# --- Main Execution ---
+@mcp.tool()
+async def reflectivereview(session_id: Optional[str] = None) -> str:
+    """
+    Generate a comprehensive review of the thought sequence with quality metrics.
+    """
+    try:
+        # Use current session if no ID provided
+        if not session_id:
+            session_id = app_context.session_id
+
+        # Generate review
+        review = await generate_sequence_review(session_id, app_context)
+
+        # Format review for output
+        output = [
+            "# Thought Sequence Review",
+            f"**Session ID**: {review.session_id}",
+            f"**Total Thoughts**: {review.total_thoughts}",
+            f"**Total Branches**: {review.total_branches}",
+            f"**Overall Quality**: {review.overall_quality:.2f}",
+            f"**Topic Alignment**: {review.topic_alignment_score:.2f}",
+            "",
+            "## Key Insights",
+        ]
+
+        for i, insight in enumerate(review.key_insights, 1):
+            output.append(f"{i}. {insight}")
+
+        if review.patterns_identified:
+            output.extend(["", "## Patterns Identified"])
+            for pattern in review.patterns_identified:
+                output.append(f"- {pattern}")
+
+        if review.tool_effectiveness:
+            output.extend(["", "## Tool Effectiveness"])
+            for tool, effectiveness in review.tool_effectiveness.items():
+                output.append(f"- {tool}: {effectiveness:.2f}")
+
+        if review.branch_analyses:
+            output.extend(["", "## Branch Analysis"])
+            for branch in review.branch_analyses:
+                output.append(
+                    f"\n### Branch: {branch.branch_id}\n"
+                    f"- Quality: {branch.branch_quality:.2f}\n"
+                    f"- Thoughts: {branch.thought_count}\n"
+                    f"- Status: {branch.completion_status}\n"
+                    f"- Recommendation: {branch.recommendation}"
+                )
+
+        if review.next_steps:
+            output.extend(["", "## Recommended Next Steps"])
+            for step in review.next_steps:
+                output.append(f"- {step}")
+
+        if review.areas_for_improvement:
+            output.extend(["", "## Areas for Improvement"])
+            for area in review.areas_for_improvement:
+                output.append(f"- {area}")
+
+        output.append(f"\n**Review Confidence**: {review.review_confidence:.2f}")
+
+        return "\n".join(output)
+
+    except Exception as e:
+        logger.error(f"Failed to generate review: {e}")
+        return f"Error generating review: {str(e)}"
 
 
-def run():
-    """Initializes and runs the MCP server in coordinate mode."""
-    selected_provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-    logger.info(f"Using provider: {selected_provider}")
-    logger.info(
-        f"Initializing Sequential Thinking Server (Coordinate Mode) with Provider: {selected_provider}..."
-    )
+@mcp.tool()
+async def toolselectthinking(
+    thought: str,
+    available_tools: Optional[List[str]] = None,
+    domain: str = "general",
+    context: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Intelligent tool selection for a given thought or task.
+    Analyzes the thought and recommends appropriate MCP tools with confidence scores.
 
-    global app_context
-    # Initialize application resources using the lifespan manager implicitly if running via framework
-    # For direct script execution, we initialize here.
-    # If using app_lifespan, this manual init might be redundant depending on framework.
-    if not app_context:  # Check if context already exists (e.g., from lifespan manager)
-        logger.info("Initializing application resources directly (Coordinate Mode)...")
-        try:
-            team = create_reflective_thinking_team()
-            app_context = AppContext(team=team)
-            logger.info(
-                f"Agno team initialized directly in coordinate mode using provider: {selected_provider}."
+    Args:
+        thought: The current thought or task description
+        available_tools: List of available tool names (if None, uses known tools)
+        domain: Domain context (general, technical, creative, analytical, strategic, research)
+        context: Additional context for tool selection
+
+    Returns:
+        Tool recommendations with confidence scores and rationale
+    """
+    try:
+        # Create minimal thought data for analysis
+        thought_data = ThoughtData(
+            thought=thought,
+            thoughtNumber=1,
+            totalThoughts=1,
+            nextThoughtNeeded=False,
+            domain=DomainType(domain.lower())
+            if domain.lower() in [d.value for d in DomainType]
+            else DomainType.GENERAL,
+            keywords=[],  # Will be extracted by tool selector
+            isRevision=False,
+            needsMoreThoughts=False,
+            session_context=app_context.session_context,
+            topic=None,
+            subject=None,
+            revisesThought=None,
+            branchFromThought=None,
+            branchId=None,
+            current_step=None,
+            reflection_feedback=None,
+            confidence_score=0.5,
+            timestamp_ms=int(time.time() * 1000),
+            processing_time_ms=0,
+        )
+
+        # Update available tools if provided
+        if available_tools:
+            app_context.update_available_tools(available_tools)
+
+        # Get tool recommendations
+        recommendations = app_context.tool_selector.recommend_tools(
+            thought_data,
+            available_tools or app_context.available_mcp_tools,
+            max_recommendations=5,
+        )
+
+        # Format output
+        output = [
+            "# Tool Recommendations for Task",
+            f"**Task**: {thought[:200]}...",
+            f"**Domain**: {domain}",
+            "",
+            "## Recommended Tools",
+        ]
+
+        for i, tool_rec in enumerate(recommendations.recommended_tools, 1):
+            output.append(
+                f"\n### {i}. {tool_rec.tool_name}\n"
+                f"**Confidence**: {tool_rec.confidence:.2f}\n"
+                f"**Priority**: {tool_rec.priority}\n"
+                f"**Rationale**: {tool_rec.rationale}\n"
+                f"**Expected Outcome**: {tool_rec.expected_outcome}"
             )
-        except Exception as e:
-            logger.critical(f"Failed to initialize Agno team: {e}", exc_info=True)
-            sys.exit(1)
+
+            if tool_rec.suggested_inputs:
+                output.append("**Suggested Inputs**:")
+                for key, value in tool_rec.suggested_inputs.items():
+                    output.append(f"  - {key}: {value}")
+
+            if tool_rec.alternatives:
+                output.append(f"**Alternatives**: {', '.join(tool_rec.alternatives)}")
+
+        # Add step information
+        output.extend(
+            [
+                "",
+                "## Step Information",
+                f"**Description**: {recommendations.step_description}",
+                f"**Expected Outcome**: {recommendations.expected_outcome}",
+            ]
+        )
+
+        if recommendations.validation_criteria:
+            output.extend(["", "**Validation Criteria**:"])
+            for criterion in recommendations.validation_criteria:
+                output.append(f"- {criterion}")
+
+        # Add tool statistics if available
+        tool_stats = app_context.tool_selector.get_tool_statistics()
+        if tool_stats:
+            output.extend(["", "## Historical Tool Performance"])
+            for tool_name, stats in tool_stats.items():
+                if tool_name in [
+                    t.tool_name for t in recommendations.recommended_tools
+                ]:
+                    output.append(
+                        f"- **{tool_name}**: "
+                        f"Used {stats['usage_count']} times, "
+                        f"Avg effectiveness: {stats['avg_effectiveness']:.2f}"
+                    )
+
+        return "\n".join(output)
+
+    except Exception as e:
+        error_msg = app_context.error_handler.handle_error(
+            e, ErrorType.TOOL_SELECTION_ERROR
+        )
+        logger.error(f"Tool selection error: {e}")
+        return f"Error in tool selection: {error_msg}\n\nFallback: Consider using ThinkingTools for general analysis."
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Lifecycle manager for the MCP server."""
+    logger.info("Starting Reflective Thinking MCP Server...")
 
     try:
-        logger.info("Sequential Thinking MCP Server running on stdio (Coordinate Mode)")
-        if not app_context:
-            logger.critical("FATAL: Application context not initialized before run.")
-            sys.exit(1)
-
-        mcp.run(transport="stdio")
-    finally:
-        logger.info("Shutting down application resources...")
-        app_context = None  # Clean up context if initialized directly
-
-
-def check_environment_variables():
-    """Checks for necessary environment variables based on the selected provider."""
-    provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-    api_key_var = ""
-
-    if provider == "deepseek":
-        api_key_var = "DEEPSEEK_API_KEY"
-    elif provider == "groq":
-        api_key_var = "GROQ_API_KEY"
-    elif provider == "openrouter":
-        api_key_var = "OPENROUTER_API_KEY"
-    if api_key_var and api_key_var not in os.environ:
-        logger.warning(
-            f"{api_key_var} environment variable not found. Model initialization for '{provider}' might fail."
-        )
-    try:
-        ModelClass, _, _ = get_model_config()  # Just need the class for dummy init
-        dummy_model = ModelClass(id="dummy-check")  # Use a placeholder ID
-        researcher_for_check = Agent(
-            name="CheckAgent", tools=[ExaTools()], model=dummy_model
-        )
-        uses_exa = any(
-            isinstance(t, ExaTools) for t in (researcher_for_check.tools or [])
-        )
-
-        if uses_exa and "EXA_API_KEY" not in os.environ:
-            logger.warning(
-                "EXA_API_KEY environment variable not found, but ExaTools are configured in a team member. Researcher agent might fail."
-            )
+        # Initialize teams on startup
+        await app_context.initialize_teams()
+        logger.info("Teams initialized successfully")
     except Exception as e:
-        logger.error(f"Could not perform ExaTools check due to an error: {e}")
+        logger.error(f"Failed to initialize teams: {e}")
+        # Continue anyway - teams will be initialized on first use
+
+    yield
+
+    # Cleanup
+    logger.info("Shutting down Reflective Thinking MCP Server...")
+    app_context.cleanup()
 
 
+# Main execution
 if __name__ == "__main__":
-    check_environment_variables()
-    try:
-        run()
-    except Exception as e:
-        logger.critical(f"Failed during server run: {e}", exc_info=True)
-        sys.exit(1)
+    # Configure server
+    server_config = {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "log_level": "info",
+    }
+
+    logger.info(f"Starting server with configuration: {server_config}")
+
+    # Run the server
+    mcp.run()

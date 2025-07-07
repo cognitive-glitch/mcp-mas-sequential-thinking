@@ -80,7 +80,9 @@ class ToolRecommendation(BaseModel):
     @property
     def risk_level(self) -> str:
         """Computes risk level based on confidence and risk assessment."""
-        if self.confidence >= 0.8 and (not self.risk_assessment or "low" in self.risk_assessment.lower()):
+        if self.confidence >= 0.8 and (
+            not self.risk_assessment or "low" in self.risk_assessment.lower()
+        ):
             return "low"
         elif self.confidence >= 0.6:
             return "medium"
@@ -88,12 +90,12 @@ class ToolRecommendation(BaseModel):
             return "high"
 
     # Enhanced field serializers
-    @field_serializer('rationale')
+    @field_serializer("rationale")
     def serialize_rationale(self, value: str) -> str:
         """Ensures rationale is properly formatted for MCP output."""
-        return value.strip().replace('\n', ' ').replace('\r', '')
+        return value.strip().replace("\n", " ").replace("\r", "")
 
-    @field_serializer('confidence')
+    @field_serializer("confidence")
     def serialize_confidence(self, value: float) -> float:
         """Rounds confidence to 2 decimal places for consistency."""
         return round(value, 2)
@@ -132,22 +134,26 @@ class StepRecommendation(BaseModel):
         """Average confidence of all recommended tools."""
         if not self.recommended_tools:
             return 0.0
-        return sum(tool.confidence for tool in self.recommended_tools) / len(self.recommended_tools)
+        return sum(tool.confidence for tool in self.recommended_tools) / len(
+            self.recommended_tools
+        )
 
     # Enhanced validators
-    @field_validator('recommended_tools')
+    @field_validator("recommended_tools")
     @classmethod
-    def validate_tool_priorities(cls, tools: List[ToolRecommendation]) -> List[ToolRecommendation]:
+    def validate_tool_priorities(
+        cls, tools: List[ToolRecommendation]
+    ) -> List[ToolRecommendation]:
         """Validates that tool priorities are unique and properly ordered."""
         if not tools:
             return tools
-        
+
         priorities = [tool.priority for tool in tools]
         if len(set(priorities)) != len(priorities):
             # Auto-fix duplicate priorities
             for i, tool in enumerate(tools):
                 tool.priority = i + 1
-        
+
         return sorted(tools, key=lambda x: x.priority)
 
 
@@ -333,20 +339,28 @@ class ThoughtData(BaseModel):
     def content_complexity(self) -> float:
         """Analyzes content complexity based on multiple factors."""
         text = self.thought.lower()
-        
+
         # Word count factor (0-1)
         word_count = len(text.split())
         word_factor = min(word_count / 100.0, 1.0)  # Normalize to 100 words
-        
+
         # Technical terms factor
-        technical_terms = ['algorithm', 'implementation', 'optimization', 'analysis', 'architecture']
+        technical_terms = [
+            "algorithm",
+            "implementation",
+            "optimization",
+            "analysis",
+            "architecture",
+        ]
         tech_count = sum(1 for term in technical_terms if term in text)
         tech_factor = min(tech_count / 5.0, 1.0)
-        
+
         # Question complexity (more questions = more complexity)
-        question_count = text.count('?') + text.count('how') + text.count('why') + text.count('what')
+        question_count = (
+            text.count("?") + text.count("how") + text.count("why") + text.count("what")
+        )
         question_factor = min(question_count / 5.0, 1.0)
-        
+
         return (word_factor * 0.4) + (tech_factor * 0.4) + (question_factor * 0.2)
 
     @computed_field
@@ -355,28 +369,30 @@ class ThoughtData(BaseModel):
         """Computes how well this thought aligns with stated topic/subject."""
         if not self.topic and not self.subject:
             return 0.5  # Neutral when no topic specified
-        
+
         text = self.thought.lower()
         alignment_score = 0.0
         checks = 0
-        
+
         if self.topic:
             checks += 1
             topic_words = self.topic.lower().split()
             topic_mentions = sum(1 for word in topic_words if word in text)
             alignment_score += min(topic_mentions / max(len(topic_words), 1), 1.0)
-        
+
         if self.subject:
             checks += 1
             subject_words = self.subject.lower().split()
             subject_mentions = sum(1 for word in subject_words if word in text)
             alignment_score += min(subject_mentions / max(len(subject_words), 1), 1.0)
-        
+
         if self.keywords:
             checks += 1
-            keyword_mentions = sum(1 for keyword in self.keywords if keyword.lower() in text)
+            keyword_mentions = sum(
+                1 for keyword in self.keywords if keyword.lower() in text
+            )
             alignment_score += min(keyword_mentions / max(len(self.keywords), 1), 1.0)
-        
+
         return alignment_score / max(checks, 1)
 
     @computed_field
@@ -384,27 +400,27 @@ class ThoughtData(BaseModel):
     def overall_quality_estimate(self) -> float:
         """Estimates overall thought quality from multiple factors."""
         factors = []
-        
+
         # Content complexity (balanced - not too simple, not too complex)
         complexity = self.content_complexity
         complexity_score = 1.0 - abs(complexity - 0.6)  # Optimal around 0.6
         factors.append(complexity_score)
-        
+
         # Topic alignment
         factors.append(self.topic_alignment_score)
-        
+
         # Confidence score
         factors.append(self.confidence_score)
-        
+
         # Tool recommendation quality
         if self.current_step and self.current_step.recommended_tools:
             avg_tool_confidence = self.current_step.avg_tool_confidence
             factors.append(avg_tool_confidence)
-        
+
         # Reflection feedback if available
         if self.reflection_feedback:
             factors.append(self.reflection_feedback.overall_quality)
-        
+
         return sum(factors) / len(factors)
 
     @computed_field
@@ -420,24 +436,24 @@ class ThoughtData(BaseModel):
         return not self.nextThoughtNeeded and self.thoughtNumber >= self.totalThoughts
 
     # Enhanced field serializers for MCP compatibility
-    @field_serializer('timestamp_ms')
+    @field_serializer("timestamp_ms")
     def serialize_timestamp(self, value: Optional[int]) -> Optional[int]:
         """Ensures timestamp is properly formatted or generates current time."""
         if value is None:
             return int(time.time() * 1000)
         return value
 
-    @field_serializer('thought')
+    @field_serializer("thought")
     def serialize_thought_content(self, value: str) -> str:
         """Cleans and formats thought content for MCP output."""
         # Remove excessive whitespace and normalize
-        cleaned = re.sub(r'\s+', ' ', value.strip())
+        cleaned = re.sub(r"\s+", " ", value.strip())
         # Ensure reasonable length for MCP
         if len(cleaned) > 8000:
             cleaned = cleaned[:7950] + "... [truncated]"
         return cleaned
 
-    @field_serializer('keywords')
+    @field_serializer("keywords")
     def serialize_keywords(self, value: List[str]) -> List[str]:
         """Ensures keywords are properly formatted and deduplicated."""
         # Remove duplicates while preserving order
@@ -449,7 +465,7 @@ class ThoughtData(BaseModel):
                 unique_keywords.append(keyword.strip())
         return unique_keywords[:15]  # Limit to 15 keywords
 
-    @field_serializer('confidence_score')
+    @field_serializer("confidence_score")
     def serialize_confidence(self, value: float) -> float:
         """Rounds confidence to 3 decimal places for precision."""
         return round(value, 3)
@@ -566,22 +582,22 @@ class ThoughtData(BaseModel):
     def validate_thought_content(cls, v: str) -> str:
         """Enhanced thought content validation."""
         v = v.strip()
-        
+
         # Check for minimum meaningful content
         if len(v) < 10:
             raise ValueError("Thought content must be at least 10 characters long")
-        
+
         # Check for suspicious patterns that might indicate poor quality
         if v.lower() in ["test", "testing", "debug", "placeholder"]:
             raise ValueError("Please provide meaningful thought content")
-        
+
         # Check for excessive repetition
         words = v.lower().split()
         if len(words) > 5:
             unique_words = set(words)
             if len(unique_words) / len(words) < 0.3:  # Less than 30% unique words
                 raise ValueError("Thought content appears to be too repetitive")
-        
+
         return v
 
     @field_validator("thoughtNumber", "totalThoughts")
@@ -589,7 +605,7 @@ class ThoughtData(BaseModel):
     def validate_thought_numbers(cls, v: int, info: ValidationInfo) -> int:
         """Enhanced validation for thought numbers."""
         field_name = info.field_name
-        
+
         if field_name == "thoughtNumber":
             if v > 1000:  # Reasonable upper limit
                 raise ValueError("thoughtNumber exceeds reasonable limit (1000)")
@@ -601,18 +617,18 @@ class ThoughtData(BaseModel):
             if thought_num and v < thought_num:
                 # Auto-adjust totalThoughts if it's too low
                 return max(v, thought_num)
-        
+
         return v
 
     @model_validator(mode="after")
     def validate_comprehensive_logic(self) -> "ThoughtData":
         """Comprehensive validation of thought logic and relationships."""
-        
+
         # Validate branch relationships
         if self.branchFromThought is not None:
             if self.branchFromThought >= self.thoughtNumber:
                 raise ValueError("branchFromThought must be less than thoughtNumber")
-            
+
             # Branch should have meaningful difference from parent
             if self.branchFromThought == self.thoughtNumber - 1 and not self.isRevision:
                 raise ValueError("Consecutive branching may indicate revision instead")
@@ -621,7 +637,7 @@ class ThoughtData(BaseModel):
         if self.isRevision and self.revisesThought:
             if self.revisesThought >= self.thoughtNumber:
                 raise ValueError("Cannot revise future or current thought")
-            
+
             # Revision should be meaningful (different content)
             if len(self.thought) < 20:
                 raise ValueError("Revision should provide substantial new content")
@@ -631,14 +647,16 @@ class ThoughtData(BaseModel):
             for rel in self.thought_relationships:
                 if rel.from_thought == rel.to_thought:
                     raise ValueError("Thought cannot relate to itself")
-                
+
                 # Validate relationship strength
                 if rel.strength < 0.1:
                     raise ValueError("Relationship strength too weak to be meaningful")
 
         # Validate tool recommendation consistency
         if self.current_step and self.current_step.recommended_tools:
-            high_confidence_tools = [t for t in self.current_step.recommended_tools if t.confidence > 0.8]
+            high_confidence_tools = [
+                t for t in self.current_step.recommended_tools if t.confidence > 0.8
+            ]
             if high_confidence_tools and self.confidence_score < 0.5:
                 # If we have high-confidence tools, thought confidence should be reasonable
                 self.confidence_score = max(self.confidence_score, 0.6)
@@ -646,10 +664,14 @@ class ThoughtData(BaseModel):
         # Validate final thought logic
         if not self.nextThoughtNeeded and self.thoughtNumber < self.totalThoughts:
             # Auto-adjust if final thought doesn't match expectations
-            if self.thoughtNumber >= max(3, self.totalThoughts * 0.8):  # At least 80% complete
+            if self.thoughtNumber >= max(
+                3, self.totalThoughts * 0.8
+            ):  # At least 80% complete
                 self.totalThoughts = self.thoughtNumber
             else:
-                raise ValueError("Ending thought sequence too early - insufficient progress")
+                raise ValueError(
+                    "Ending thought sequence too early - insufficient progress"
+                )
 
         return self
 
@@ -829,11 +851,13 @@ class ProcessedThought(BaseModel):
         """Calculates processing efficiency based on execution time and content complexity."""
         if self.execution_time_ms <= 0:
             return 0.0
-        
+
         # Estimate content complexity (simple heuristic)
         content_length = len(self.integrated_response) + len(self.thought_data.thought)
-        complexity_factor = min(content_length / 1000.0, 3.0)  # Normalize to reasonable range
-        
+        complexity_factor = min(
+            content_length / 1000.0, 3.0
+        )  # Normalize to reasonable range
+
         # Efficiency = complexity handled per second
         time_seconds = self.execution_time_ms / 1000.0
         return complexity_factor / max(time_seconds, 0.1)
@@ -843,44 +867,44 @@ class ProcessedThought(BaseModel):
     def quality_score(self) -> float:
         """Estimates overall processing quality."""
         factors = []
-        
+
         # Success factor
         factors.append(1.0 if self.success else 0.0)
-        
+
         # Tool recommendation quality
         if self.tool_recommendations_generated:
             factors.append(0.8)
-        
+
         # Reflection quality
         if self.reflection_applied and self.reflection_response:
             factors.append(0.9)
-        
+
         # Context integration
         if self.context_updated:
             factors.append(0.7)
-        
+
         # Thought data quality
-        if hasattr(self.thought_data, 'overall_quality_estimate'):
+        if hasattr(self.thought_data, "overall_quality_estimate"):
             factors.append(self.thought_data.overall_quality_estimate)
-        
+
         return sum(factors) / len(factors) if factors else 0.5
 
     # Enhanced field serializers
-    @field_serializer('execution_time_ms')
+    @field_serializer("execution_time_ms")
     def serialize_execution_time(self, value: int) -> int:
         """Ensures execution time is non-negative."""
         return max(value, 0)
 
-    @field_serializer('integrated_response')
+    @field_serializer("integrated_response")
     def serialize_integrated_response(self, value: str) -> str:
         """Cleans and formats integrated response."""
-        return value.strip().replace('\r\n', '\n').replace('\r', '\n')
+        return value.strip().replace("\r\n", "\n").replace("\r", "\n")
 
     # Enhanced validation
     @model_validator(mode="after")
     def validate_processing_consistency(self) -> "ProcessedThought":
         """Validates processing result consistency."""
-        
+
         # Error state consistency
         if not self.success and not self.error:
             self.error = "Processing failed with unknown error"
@@ -888,17 +912,22 @@ class ProcessedThought(BaseModel):
             # Success but error present - clear error or mark as warning
             if "warning" not in self.error.lower():
                 self.success = False
-        
+
         # Tool recommendations consistency
-        if self.tool_recommendations_generated and self.thought_data.current_step is None:
+        if (
+            self.tool_recommendations_generated
+            and self.thought_data.current_step is None
+        ):
             self.tool_recommendations_generated = False
-        
+
         # Reflection consistency
         if self.reflection_applied and not self.reflection_response:
             self.reflection_applied = False
-        
+
         # Response content validation
         if self.success and len(self.integrated_response.strip()) < 10:
-            raise ValueError("Successful processing should produce substantial response")
-        
+            raise ValueError(
+                "Successful processing should produce substantial response"
+            )
+
         return self
