@@ -4,14 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Reflective Sequential Thinking MCP Tool** that implements an advanced multi-agent system for complex problem-solving with reflective reasoning capabilities. The system uses Agno framework for multi-agent coordination and FastMCP for serving tools via the Model Context Protocol.
+This is a **Reflective Sequential Thinking MCP Tool** that implements an advanced multi-agent system for complex problem-solving with reflective reasoning capabilities. The system uses a custom AsyncTeam implementation (replacing Agno Team for async compatibility) and FastMCP for serving tools via the Model Context Protocol.
 
 **Key Technologies:**
-- **Agno**: Multi-agent system framework
+- **AsyncTeam**: Custom async-compatible team coordination (replaces Agno Team)
+- **Agno Agent**: Individual agent framework (still used for agents)
 - **FastMCP**: Model Context Protocol server
-- **Pydantic**: Data validation with strict typing
+- **Pydantic v2**: Data validation with strict typing and advanced features
 - **Python 3.13+**: Required Python version
-- **Async/Await**: For efficient multi-agent coordination
+- **Async/Await**: Core to the entire architecture
+
+**Architecture Highlights:**
+- Dual-team system (Primary Thinking + Reflection teams)
+- In-memory shared context (no persistence by design)
+- Tool selection intelligence with confidence scoring
+- Circuit breaker pattern for fault tolerance
+- Comprehensive error handling with graceful degradation
 
 ## Development Commands
 
@@ -21,10 +29,7 @@ This is a **Reflective Sequential Thinking MCP Tool** that implements an advance
 uv pip install -e ".[dev]"
 
 # Run the MCP server
-uv run python main.py
-
-# Or run directly
-python main.py
+uv run python src/main.py
 ```
 
 ### Code Quality & Linting
@@ -43,16 +48,13 @@ ruff check . --fix && ruff format . && pyright .
 ### Testing
 ```bash
 # Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_thought_data.py
+uv run pytest
 
 # Run with coverage
-pytest --cov=. --cov-report=html
+uv run pytest --cov=src --cov-report=html
 
-# Run single test
-pytest tests/test_thought_data.py::test_validation -v
+# Run specific test file
+uv run pytest tests/test_thought_models.py -v
 ```
 
 ### Type Checking Configuration
@@ -63,33 +65,46 @@ The project uses strict type checking. Key pyright settings in `pyproject.toml`:
 
 ## High-Level Architecture
 
-### Current Architecture (To Be Overhauled)
-- **Single Team Coordinator**: Uses Agno Team in coordinate mode
-- **5 Specialist Agents**: Planner, Researcher, Analyzer, Critic, Synthesizer
-- **Linear Processing**: Each thought processed independently
-- **Limited Context**: No persistent memory between thoughts
-- **One-way Communication**: Coordinator → Specialists → Coordinator
+### Current Architecture (Implemented)
 
-### Proposed Reflective Architecture
+#### AsyncTeam Implementation
+The project uses a custom `AsyncTeam` class that replaces Agno's Team to solve async compatibility issues:
 
-#### 1. **Dual-Team System**
+```python
+class AsyncTeam:
+    """Simple async-compatible team replacement for Agno Team."""
+    
+    async def arun(self, input_prompt: str) -> Any:
+        """Async run method that coordinates team members without asyncio.run()."""
+        # Runs agents concurrently using asyncio.gather()
+        # Returns MockResponse object compatible with original Team interface
+```
+
+**Why AsyncTeam?**
+- Agno Team internally calls `asyncio.run()` which fails in MCP's async context
+- FastMCP tools already run in an event loop
+- AsyncTeam uses `asyncio.gather()` for concurrent agent execution
+- Maintains compatibility with existing code expecting Team responses
+
+#### Dual-Team System (Active)
 ```python
 # Primary Thinking Team - Handles main reasoning flow
-thinking_team = Team(
-    name="ThinkingTeam",
-    mode="coordinate",
-    members=[planner, researcher, analyzer, implementer],
-    shared_context=SharedContext()  # NEW: Persistent context
+primary_team = AsyncTeam(
+    name="PrimaryThinkingTeam",
+    members=[planner, researcher, analyzer, critic, synthesizer],
+    instructions=await self._generate_adaptive_coordinator_instructions(),
+    model=team_model
 )
 
 # Reflection Team - Provides meta-analysis and feedback
-reflection_team = Team(
+reflection_team = AsyncTeam(
     name="ReflectionTeam", 
-    mode="coordinate",
     members=[meta_analyzer, pattern_recognizer, quality_assessor, decision_critic],
-    shared_context=SharedContext()  # Same context instance
+    instructions=[...],  # Reflection-specific instructions
+    model=team_model
 )
 ```
+
 
 #### 2. **Enhanced ThoughtData Model**
 ```python
@@ -118,22 +133,29 @@ class ReflectionFeedback(BaseModel):
     overall_quality: float
 ```
 
-#### 3. **Shared Context System**
+#### 3. **Shared Context System (Simplified)**
 ```python
 class SharedContext:
-    """Persistent context shared across all agents and thoughts"""
-    def __init__(self, backend: Literal["redis", "memory"] = "memory"):
+    """Simple in-memory shared context for multi-agent coordination.
+    Maintains state only for the current execution - no persistence, no sessions."""
+    
+    def __init__(self):
         self.memory_store: Dict[str, Any] = {}
         self.tool_usage_history: List[ToolDecision] = []
-        self.thought_graph: nx.DiGraph = nx.DiGraph()  # Track relationships
-        self.key_insights: List[Insight] = []
+        self.thought_graph: nx.DiGraph = nx.DiGraph()
+        self.key_insights: List[Dict[str, Any]] = []
+        self.performance_metrics: Dict[str, List[float]] = defaultdict(list)
         
     async def update_context(self, key: str, value: Any) -> None:
-        """Thread-safe context update"""
+        """Update context with automatic memory management"""
+        # Implements FIFO eviction when memory exceeds 100 items
         
-    async def get_relevant_context(self, thought: str) -> Dict[str, Any]:
+    async def get_relevant_context(self, thought_data: ThoughtData) -> Dict[str, Any]:
         """Retrieve context relevant to current thought"""
+        # Returns filtered context based on thought domain and keywords
 ```
+
+**Design Decision**: No persistent storage per user feedback - "persistent memory is not a good design"
 
 #### 4. **Reflective Processing Flow**
 ```python
@@ -164,17 +186,39 @@ async def process_thought_with_reflection(thought_data: ThoughtData) -> Processe
     return final_response
 ```
 
-#### 5. **New Agent Roles**
+#### 5. **MCP Tools and Prompts**
 
-**Reflection Team Agents:**
-- **MetaAnalyzer**: Analyzes the thinking process itself, identifies cognitive biases
-- **PatternRecognizer**: Detects recurring patterns, successful strategies
-- **QualityAssessor**: Evaluates response quality, completeness, accuracy
-- **DecisionCritic**: Reviews tool selection decisions and their outcomes
+**Available MCP Tools:**
+```python
+@mcp.tool()
+async def reflectivethinking(thought_data: ThoughtData) -> str:
+    """Main reflective thinking tool with dual-team processing"""
 
-**Enhanced Thinking Team:**
-- **Implementer**: New agent focused on code generation with tool usage
-- **ContextManager**: Manages and retrieves relevant context
+@mcp.tool()
+async def toolselectthinking(
+    thought: str,
+    available_tools: Optional[List[str]] = None,
+    domain: str = "general",
+    context: Optional[Dict[str, Any]] = None
+) -> str:
+    """Intelligent tool selection for a given thought or task"""
+
+@mcp.tool()
+async def reflectivereview(
+    session_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
+    min_quality_threshold: float = 0.0
+) -> str:
+    """Review and analyze a sequence of thoughts from current session"""
+```
+
+**Available MCP Prompts:**
+```python
+@mcp.prompt("sequential-thinking")
+@mcp.prompt("tool-selection") 
+@mcp.prompt("thought-review")
+@mcp.prompt("complex-problem")
+```
 
 ## Key Implementation Guidelines
 
@@ -247,12 +291,32 @@ async def log_thought_processing(thought_data: ThoughtData) -> None:
     )
 ```
 
-## Migration Path
+## Critical Implementation Details
 
-1. **Phase 1**: Add SharedContext to existing system
-2. **Phase 2**: Implement reflection team alongside existing team
-3. **Phase 3**: Enhance ThoughtData model incrementally
-4. **Phase 4**: Full bidirectional feedback implementation
+### AsyncTeam vs Agno Team
+The original Agno Team class is **incompatible** with FastMCP's async context:
+
+```python
+# ❌ WRONG - This causes "asyncio.run() cannot be called from a running event loop"
+from agno.team.team import Team
+team = Team(...)
+await team.arun(...)  # Internally calls asyncio.run() 
+
+# ✅ CORRECT - Use AsyncTeam
+team = AsyncTeam(...)
+await team.arun(...)  # Uses asyncio.gather() instead
+```
+
+### Agent Model Invocation
+Agno models have different async methods:
+
+```python
+# In AsyncTeam._run_agent_safe()
+if hasattr(agent.model, 'aresponse'):
+    response = await agent.model.aresponse(prompt)  # OpenAI models
+elif hasattr(agent.model, 'ainvoke'):
+    response = await agent.model.ainvoke(prompt)    # Other models
+```
 
 ## Environment Variables
 
@@ -283,44 +347,8 @@ ENABLE_SHARED_CONTEXT=true
 REFLECTION_DELAY_MS=500
 ```
 
-## Testing Strategy
 
-### Unit Tests
-- Test each agent in isolation with mocked dependencies
-- Test ThoughtData validation comprehensively
-- Test SharedContext operations with different backends
 
-### Integration Tests
-- Test team coordination with real agents
-- Test reflection feedback integration
-- Test context persistence across thoughts
-
-### End-to-End Tests
-- Test complete thought processing flows
-- Test revision and branching with reflection
-- Test error recovery and resilience
-
-## Performance Considerations
-
-1. **Token Usage**: Reflection team adds ~2-3x token overhead
-2. **Latency**: Parallel processing keeps latency increase minimal
-3. **Memory**: SharedContext requires careful memory management
-4. **Concurrency**: Use connection pooling for Redis backend
-
-## Security Considerations
-
-1. **Input Validation**: Strict Pydantic validation on all inputs
-2. **Context Isolation**: Separate contexts for different sessions
-3. **Rate Limiting**: Implement per-session rate limits
-4. **Sanitization**: Clean context data before storage
-
-## Common Pitfalls to Avoid
-
-1. **Circular Dependencies**: In thought relationships
-2. **Context Bloat**: Unbounded context growth
-3. **Over-Reflection**: Too many reflection cycles
-4. **Type Mismatches**: Between teams and agents
-5. **Blocking Operations**: In async code paths
 
 ## Claude Code Hooks Integration
 
@@ -382,83 +410,35 @@ PreToolUse hooks can return JSON to control execution:
 ### Security Warning
 ⚠️ Hooks execute with full user permissions. Validate all commands carefully.
 
-## Critical Bug Fixes Needed
+## Known Issues and Solutions
 
-### 1. Zero Token API Calls
-**Problem**: The tool sometimes sends empty content to the API, causing errors.
-**Location**: `main.py` lines ~740-745
-**Fix**:
-```python
-# Replace this problematic code:
-coordinator_response_content = team_response.content if hasattr(team_response, 'content') else None
-coordinator_response = str(coordinator_response_content) if coordinator_response_content is not None else ""
+### 1. ✅ FIXED: Team Processing Error
+**Original Problem**: `asyncio.run() cannot be called from a running event loop`
+**Root Cause**: Agno Team internally uses `asyncio.run()` which conflicts with FastMCP's event loop
+**Solution**: Implemented custom `AsyncTeam` class that uses `asyncio.gather()` instead
 
-# With proper error handling:
-if not team_response or not hasattr(team_response, 'content') or not team_response.content:
-    logger.error(f"Empty response from team for thought #{final_thought_data.thoughtNumber}")
-    return "Error: Team coordinator returned empty response. Please retry with a clearer thought."
+### 2. Agent Model Method Compatibility
+**Issue**: Different model providers have different async method names
+**Solution**: AsyncTeam checks for multiple method names (`aresponse`, `ainvoke`)
 
-coordinator_response = str(team_response.content)
-```
+### 3. Validation Constraints
+**ThoughtData Validation Rules:**
+- Minimum thought length: 10 characters
+- Minimum total thoughts: 5 (enforced by MIN_TOTAL_THOUGHTS)
+- Cannot end sequence before thoughtNumber >= totalThoughts
+- Keywords are case-preserved (not forced to lowercase)
 
-### 2. Repetitive Guidance Text
-**Problem**: Hardcoded guidance text appears even when coordinator provides no meaningful response.
-**Fix**:
-```python
-# Only add guidance if coordinator response has substantial content
-if len(coordinator_response.strip()) > 50:  # Minimum meaningful response
-    additional_guidance = build_contextual_guidance(coordinator_response)
-else:
-    additional_guidance = "\n\nError: Insufficient response from coordinator. Please reformulate your thought."
-```
+### 4. Memory Management
+**Design Decision**: No persistent storage
+- All context is in-memory only
+- Automatic FIFO eviction at 100 items
+- No session persistence between runs
 
-### 3. Model Configuration Validation
-**Problem**: Missing model configurations can cause silent failures.
-**Fix**: Add model validation in `get_model_config()`:
-```python
-def get_model_config() -> tuple[Type[Model], str, str]:
-    provider = os.environ.get("REFLECTIVE_LLM_PROVIDER", "openrouter").lower()
-    
-    # Validate provider is supported
-    if provider not in ["openrouter", "openai", "gemini", "groq"]:
-        raise ValueError(f"Unsupported provider: {provider}")
-    
-    # Ensure API keys exist
-    api_key_map = {
-        "openrouter": "OPENROUTER_API_KEY",
-        "openai": "OPENAI_API_KEY", 
-        "gemini": "GOOGLE_API_KEY",
-        "groq": "GROQ_API_KEY"
-    }
-    
-    if api_key_map[provider] not in os.environ:
-        raise ValueError(f"Missing required API key: {api_key_map[provider]}")
-```
+## Claude Code Hooks Integration (Optional)
 
-### 4. Async Team Response Handling
-**Problem**: Team responses may timeout or fail silently.
-**Fix**: Add timeout and retry logic:
-```python
-async def get_team_response_with_retry(team, input_prompt, max_retries=2):
-    for attempt in range(max_retries):
-        try:
-            response = await asyncio.wait_for(
-                team.arun(input_prompt),
-                timeout=30.0  # 30 second timeout
-            )
-            if response and hasattr(response, 'content') and response.content:
-                return response
-        except asyncio.TimeoutError:
-            logger.warning(f"Team response timeout, attempt {attempt + 1}/{max_retries}")
-        except Exception as e:
-            logger.error(f"Team response error: {e}")
-    
-    return None
-```
+**Note**: Claude Code hooks are completely optional. The MCP server runs in stdio mode by default and works perfectly without any hooks configuration. The hooks are only for enhancing the development workflow when using Claude Code.
 
-## Claude Code Hooks Integration
-
-This project includes comprehensive Claude Code hooks integration for automated development workflow enhancement.
+This project includes optional Claude Code hooks for automated development workflow enhancement.
 
 ### Quick Setup
 
