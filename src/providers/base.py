@@ -64,7 +64,7 @@ class LLMProviderFactory:
             api_key_env="OPENROUTER_API_KEY",
             team_model_env="OPENROUTER_TEAM_MODEL_ID",
             agent_model_env="OPENROUTER_AGENT_MODEL_ID",
-            default_team_model="openai/o3-mini",
+            default_team_model="openai/o3",
             default_agent_model="x-ai/grok-3-mini",
             model_class=OpenRouter,
         ),
