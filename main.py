@@ -1314,6 +1314,225 @@ async def toolselectthinking(
         return f"Error in tool selection: {error_msg}\n\nFallback: Consider using ThinkingTools for general analysis."
 
 
+# MCP Prompts for common workflows
+
+
+@mcp.prompt("sequential-thinking")
+def sequential_thinking_prompt(problem: str, context: str = ""):
+    """
+    Starter prompt for sequential thinking that ENCOURAGES non-linear exploration
+    using coordinate mode. Returns separate user and assistant messages.
+    """
+    min_thoughts = 5  # Set a reasonable minimum number of initial thoughts
+
+    user_prompt_text = f"""Initiate a comprehensive sequential thinking process for the following problem:
+
+Problem: {problem}
+{f"Context: {context}" if context else ""}"""
+
+    assistant_guidelines = f"""I'll start the sequential thinking process. Here are the guidelines and the process we'll follow using the 'coordinate' mode team:
+
+**Sequential Thinking Goals & Guidelines (Coordinate Mode):**
+
+1. **Estimate Steps:** Analyze the problem complexity. Your initial `totalThoughts` estimate should be at least {min_thoughts}.
+2. **First Thought:** Call the 'reflectivethinking' tool with `thoughtNumber: 1`, your estimated `totalThoughts` (at least {min_thoughts}), and `nextThoughtNeeded: True`. Structure your first thought as: "Plan a comprehensive analysis approach for: {problem}"
+3. **Encouraged Revision:** Actively look for opportunities to revise previous thoughts if you identify flaws, oversights, or necessary refinements based on later analysis (especially from the Coordinator synthesizing Critic/Analyzer outputs). Use `isRevision: True` and `revisesThought: <thought_number>` when performing a revision. Robust thinking often involves self-correction. Look for 'RECOMMENDATION: Revise thought #X...' in the Coordinator's response.
+4. **Encouraged Branching:** Explore alternative paths, perspectives, or solutions where appropriate. Use `branchFromThought: <thought_number>` and `branchId: <unique_branch_name>` to initiate branches. Exploring alternatives is key to thorough analysis. Consider suggestions for branching proposed by the Coordinator (e.g., 'SUGGESTION: Consider branching...').
+5. **Extension:** If the analysis requires more steps than initially estimated, use `needsMoreThoughts: True` on the thought *before* you need the extension.
+6. **Thought Content:** Each thought must:
+   - Be detailed and specific to the current stage (planning, analysis, critique, synthesis, revision, branching).
+   - Clearly explain the *reasoning* behind the thought, especially for revisions and branches.
+   - Conclude by outlining what the *next* thought needs to address to fulfill the overall plan, considering the Coordinator's synthesis and suggestions.
+
+**Process:**
+
+- The `reflectivethinking` tool will track your progress. The Agno team operates in 'coordinate' mode. The Coordinator agent receives your thought, delegates sub-tasks to specialists (like Analyzer, Critic), and synthesizes their outputs, potentially including recommendations for revision or branching.
+- Focus on insightful analysis, constructive critique (leading to potential revisions), and creative exploration (leading to potential branching).
+- Actively reflect on the process. Linear thinking might be insufficient for complex problems.
+
+Proceed with the first thought based on these guidelines."""
+
+    return [
+        {
+            "description": "Starter prompt for non-linear sequential thinking (coordinate mode), providing problem and guidelines separately.",
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
+                {
+                    "role": "assistant",
+                    "content": {"type": "text", "text": assistant_guidelines},
+                },
+            ],
+        }
+    ]
+
+
+@mcp.prompt("tool-selection")
+def tool_selection_prompt(task: str, available_tools: Optional[str] = None):
+    """
+    Prompt for intelligent tool selection and recommendation for a given task.
+    """
+    tools_context = f"\nAvailable tools: {available_tools}" if available_tools else ""
+
+    user_prompt_text = f"""I need help selecting the right tools for this task:
+
+Task: {task}{tools_context}
+
+Please analyze this task and recommend appropriate tools with rationale."""
+
+    assistant_guidelines = """I'll help you select the most appropriate tools for your task. Let me analyze it using the tool selection system.
+
+**Tool Selection Process:**
+
+1. **Task Analysis:** First, I'll analyze the task to understand:
+   - The primary intent (research, analysis, creation, validation, etc.)
+   - Required capabilities
+   - Expected outcomes
+   - Potential challenges
+
+2. **Tool Recommendation:** Using the `toolselectthinking` tool, I'll:
+   - Identify the most relevant tools for each step
+   - Provide confidence scores and rationale
+   - Suggest alternatives when appropriate
+   - Recommend execution order
+
+3. **Implementation Guidance:** I'll provide:
+   - Specific parameters for each tool
+   - Expected outcomes from each step
+   - Risk assessments and mitigation strategies
+   - Success criteria
+
+Let me analyze your task now..."""
+
+    return [
+        {
+            "description": "Prompt for intelligent tool selection based on task analysis",
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
+                {
+                    "role": "assistant",
+                    "content": {"type": "text", "text": assistant_guidelines},
+                },
+            ],
+        }
+    ]
+
+
+@mcp.prompt("thought-review")
+def thought_review_prompt(session_id: Optional[str] = None):
+    """
+    Prompt to review and summarize a sequential thinking session.
+    """
+    session_context = (
+        f" for session {session_id}" if session_id else " for the current session"
+    )
+
+    user_prompt_text = f"""Please review and summarize the sequential thinking process{session_context}.
+
+I'd like to understand:
+- Key insights discovered
+- Decision points and branches explored
+- Revisions made and their impact
+- Overall effectiveness of the analysis
+- Recommendations for improvement"""
+
+    assistant_guidelines = """I'll review the sequential thinking session and provide a comprehensive summary.
+
+**Review Process:**
+
+1. **Session Analysis:** Using the `reflectivereview` tool, I'll examine:
+   - Total thoughts and their progression
+   - Branches explored and their outcomes
+   - Revisions made and their justifications
+   - Key insights and breakthroughs
+
+2. **Quality Assessment:** I'll evaluate:
+   - Depth of analysis at each step
+   - Effectiveness of tool usage
+   - Quality of reasoning and conclusions
+   - Areas of strength and weakness
+
+3. **Insights & Recommendations:** I'll provide:
+   - Key takeaways from the session
+   - Patterns in thinking approach
+   - Suggestions for future improvements
+   - Action items based on findings
+
+Let me review the session now..."""
+
+    return [
+        {
+            "description": "Prompt to review and analyze a sequential thinking session",
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
+                {
+                    "role": "assistant",
+                    "content": {"type": "text", "text": assistant_guidelines},
+                },
+            ],
+        }
+    ]
+
+
+@mcp.prompt("complex-problem")
+def complex_problem_prompt(
+    problem: str, constraints: Optional[str] = None, goals: Optional[str] = None
+):
+    """
+    Comprehensive prompt for tackling complex, multi-faceted problems with constraints and goals.
+    """
+    constraints_text = f"\n\nConstraints:\n{constraints}" if constraints else ""
+    goals_text = f"\n\nGoals:\n{goals}" if goals else ""
+
+    user_prompt_text = f"""I have a complex problem that requires deep, systematic analysis:
+
+Problem: {problem}{constraints_text}{goals_text}
+
+Please help me work through this systematically, exploring multiple approaches and considering various perspectives."""
+
+    assistant_guidelines = """I'll help you tackle this complex problem using a comprehensive, multi-faceted approach.
+
+**Approach Overview:**
+
+1. **Problem Decomposition:** I'll break down the problem into:
+   - Core components and dependencies
+   - Key challenges and obstacles
+   - Success criteria and metrics
+   - Stakeholder considerations
+
+2. **Multi-Path Exploration:** Using reflective thinking, I'll:
+   - Explore multiple solution approaches
+   - Consider trade-offs and implications
+   - Branch into alternative strategies
+   - Revise approaches based on insights
+
+3. **Tool Orchestration:** I'll leverage:
+   - Sequential thinking for systematic analysis
+   - Tool selection for optimal capability matching
+   - Reflection and review for quality assurance
+   - Iterative refinement based on findings
+
+4. **Synthesis & Recommendations:** I'll provide:
+   - Comparative analysis of approaches
+   - Risk assessment and mitigation strategies
+   - Implementation roadmap
+   - Success metrics and monitoring plan
+
+Let's begin with the first analytical step..."""
+
+    return [
+        {
+            "description": "Comprehensive prompt for complex problem solving with systematic exploration",
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
+                {
+                    "role": "assistant",
+                    "content": {"type": "text", "text": assistant_guidelines},
+                },
+            ],
+        }
+    ]
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Lifecycle manager for the MCP server."""

@@ -389,6 +389,8 @@ class ToolSelector:
                 else "Process the current step",
                 alternatives=alternatives,
                 suggested_inputs=self._suggest_inputs(name, thought_data),
+                risk_assessment=self._assess_risk(profile, thought_data),
+                execution_time_estimate=self._estimate_execution_time(profile),
             )
             recommendations.append(recommendation)
 
@@ -534,3 +536,41 @@ class ToolSelector:
                 }
 
         return stats
+
+    def _assess_risk(
+        self, profile: ToolProfile, thought_data: ThoughtData
+    ) -> Optional[str]:
+        """Assess potential risks for using a tool."""
+        risks = []
+
+        if profile.category == ToolCategory.CREATION:
+            if thought_data.confidence_score < 0.7:
+                risks.append(
+                    "Low confidence in current understanding may lead to suboptimal implementation"
+                )
+        elif profile.category == ToolCategory.RESEARCH and thought_data.isRevision:
+            risks.append("Research tools may yield different results on revision")
+        elif (
+            profile.category == ToolCategory.ANALYSIS
+            and len(thought_data.tool_decisions) > 5
+        ):
+            risks.append(
+                "Multiple previous analyses may indicate complexity requiring careful interpretation"
+            )
+
+        return "; ".join(risks) if risks else None
+
+    def _estimate_execution_time(self, profile: ToolProfile) -> int:
+        """Estimate execution time in milliseconds based on tool category."""
+        estimates = {
+            ToolCategory.THINKING: 3000,  # Deep thinking takes time
+            ToolCategory.RESEARCH: 2000,  # Web searches can be slow
+            ToolCategory.ANALYSIS: 1500,  # Code analysis is moderately fast
+            ToolCategory.CREATION: 1000,  # File operations are fast
+            ToolCategory.VALIDATION: 2500,  # Tests take time
+            ToolCategory.UTILITY: 500,  # Utilities are quick
+            ToolCategory.COMMUNICATION: 1000,  # Moderate speed
+            ToolCategory.UNKNOWN: 1500,  # Default estimate
+        }
+
+        return estimates.get(profile.category, 1500)

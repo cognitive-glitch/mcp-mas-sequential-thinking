@@ -147,10 +147,8 @@ def mock_app_context(
     mock_primary_team, mock_reflection_team, shared_context, mock_session_context
 ):
     """Provide a mock enhanced app context."""
-    from main_refactored import EnhancedAppContext
-
-    # Create a real context but with mocked teams
-    context = EnhancedAppContext()
+    # Create a mock context object
+    context = Mock()
     context.primary_team = mock_primary_team
     context.reflection_team = mock_reflection_team
     context.shared_context = shared_context
