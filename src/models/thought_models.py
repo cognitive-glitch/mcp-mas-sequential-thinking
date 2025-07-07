@@ -157,27 +157,6 @@ class StepRecommendation(BaseModel):
         return sorted(tools, key=lambda x: x.priority)
 
 
-class SessionContext(BaseModel):
-    """Context for the current session including available tools and state."""
-
-    session_id: str = Field(..., description="Unique session identifier")
-    available_tools: List[str] = Field(
-        default_factory=list, description="Tools available in this session"
-    )
-    session_topic: Optional[str] = Field(
-        None, description="Main topic/subject of the session"
-    )
-    session_domain: DomainType = Field(
-        DomainType.GENERAL, description="Primary domain of the session"
-    )
-    user_preferences: Dict[str, Any] = Field(
-        default_factory=dict, description="User preferences for tool selection"
-    )
-    success_metrics: Dict[str, float] = Field(
-        default_factory=dict, description="Success metrics for this session"
-    )
-
-
 class ToolDecision(BaseModel):
     """Tracks tool usage decisions for reflection."""
 
@@ -311,11 +290,6 @@ class ThoughtData(BaseModel):
     )
     thought_relationships: List[ThoughtRelation] = Field(
         default_factory=list, description="Relationships to other thoughts"
-    )
-
-    # Session Integration
-    session_context: Optional[SessionContext] = Field(
-        None, description="Session context for tool alignment"
     )
 
     # Metadata
@@ -772,7 +746,6 @@ class BranchAnalysis(BaseModel):
 class ThoughtSequenceReview(BaseModel):
     """Comprehensive review of a thought sequence for reflectivereview tool."""
 
-    session_id: str = Field(..., description="Session identifier")
     total_thoughts: int = Field(..., ge=0, description="Total number of thoughts")
     total_branches: int = Field(..., ge=0, description="Total number of branches")
     overall_quality: float = Field(

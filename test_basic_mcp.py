@@ -3,35 +3,32 @@
 Basic test to see if MCP tools work at all.
 """
 
-import asyncio
 import os
 import sys
+import pytest
 
 sys.path.append("src")
 
-from models.thought_models import ThoughtData, DomainType
 
 # Set environment for testing
 os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
 os.environ["OPENAI_API_KEY"] = "test-key-for-basic-test"
 
 
+@pytest.mark.asyncio
 async def test_basic_mcp():
     """Test basic MCP functionality without complex setup."""
     try:
         from main import reflectivethinking
 
-        # Simple thought data
-        thought_data = ThoughtData(
-            thought="This is a basic test of the reflective thinking system with sufficient content",
-            thoughtNumber=5,  # Make it the final thought
-            totalThoughts=5,
-            nextThoughtNeeded=False,
-            domain=DomainType.GENERAL,
-        )
-
+        # Simple test with new function signature
         print("Testing basic reflectivethinking...")
-        result = await reflectivethinking(thought_data)
+        result = await reflectivethinking(
+            thought="This is a basic test of the reflective thinking system with sufficient content",
+            thought_number=5,  # Make it the final thought
+            total_thoughts=5,
+            next_thought_needed=False,
+        )
         print(f"Result: {result}")
 
         return "SUCCESS" if "error" not in result.lower() else "FAILURE"
@@ -41,6 +38,6 @@ async def test_basic_mcp():
         return "FAILURE"
 
 
-if __name__ == "__main__":
-    result = asyncio.run(test_basic_mcp())
-    print(f"Basic MCP test: {result}")
+# if __name__ == "__main__":
+#     result = asyncio.run(test_basic_mcp())
+#     print(f"Basic MCP test: {result}")

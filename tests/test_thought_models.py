@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from src.models.thought_models import (
     StepRecommendation,
-    SessionContext,
     DomainType,
     BranchAnalysis,
     ThoughtSequenceReview,
@@ -343,24 +342,7 @@ class TestProcessedThought:
         assert processed.context_updated is True
 
 
-class TestSessionContext:
-    """Test the SessionContext model."""
-
-    def test_session_context_creation(self):
-        """Test creating a session context."""
-        session = SessionContext(
-            session_id="test-session-123",
-            available_tools=["tool1", "tool2"],
-            session_topic="Testing",
-            session_domain=DomainType.TECHNICAL,
-            user_preferences={"style": "detailed"},
-            success_metrics={"quality": 0.8},
-        )
-
-        assert session.session_id == "test-session-123"
-        assert len(session.available_tools) == 2
-        assert session.session_topic == "Testing"
-        assert session.session_domain == DomainType.TECHNICAL
+# SessionContext class has been removed
 
 
 class TestThoughtSequenceReview:
@@ -378,7 +360,6 @@ class TestThoughtSequenceReview:
         )
 
         review = ThoughtSequenceReview(
-            session_id="test-session",
             total_thoughts=10,
             total_branches=2,
             overall_quality=0.8,
@@ -395,7 +376,6 @@ class TestThoughtSequenceReview:
             review_confidence=0.9,
         )
 
-        assert review.session_id == "test-session"
         assert review.total_thoughts == 10
         assert review.overall_quality == 0.8
         assert len(review.branch_analyses) == 1

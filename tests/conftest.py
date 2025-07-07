@@ -5,14 +5,12 @@ Pytest configuration and fixtures for integration testing.
 import pytest
 import asyncio
 import os
-import uuid
 from unittest.mock import Mock
 from typing import List, Optional
 
 # Import the main components
 from src.models.thought_models import (
     ThoughtData,
-    SessionContext,
     DomainType,
     ToolRecommendation,
     StepRecommendation,
@@ -75,18 +73,7 @@ class MockTeam:
 
 
 @pytest.fixture
-def mock_session_context():
-    """Provide a mock session context for testing."""
-    return SessionContext(
-        session_id=str(uuid.uuid4()),
-        available_tools=["ThinkingTools", "ExaTools"],
-        session_topic="Test Topic",
-        session_domain=DomainType.TECHNICAL,
-    )
-
-
-@pytest.fixture
-def sample_thought_data(mock_session_context):
+def sample_thought_data():
     """Provide sample thought data for testing."""
     return ThoughtData(
         thought="Analyze the performance characteristics of the dual-team architecture",
@@ -97,7 +84,6 @@ def sample_thought_data(mock_session_context):
         subject="Architecture Evaluation",
         domain=DomainType.TECHNICAL,
         keywords=["performance", "architecture", "analysis"],
-        session_context=mock_session_context,
         timestamp_ms=1234567890000,
         isRevision=False,
         revisesThought=None,
@@ -143,16 +129,14 @@ def mock_reflection_team():
 
 
 @pytest.fixture
-def mock_app_context(
-    mock_primary_team, mock_reflection_team, shared_context, mock_session_context
-):
+def mock_app_context(mock_primary_team, mock_reflection_team, shared_context):
     """Provide a mock enhanced app context."""
     # Create a mock context object
     context = Mock()
     context.primary_team = mock_primary_team
     context.reflection_team = mock_reflection_team
     context.shared_context = shared_context
-    context.session_context = mock_session_context
+    context.available_tools = ["ThinkingTools", "ExaTools"]
 
     # Mock the provider config
     context.provider_config = Mock()
@@ -279,7 +263,6 @@ def create_test_thought_data(**overrides):
         "confidence_score": 0.5,
         "timestamp_ms": 1234567890000,
         "processing_time_ms": 1000,
-        "session_context": None,
     }
     defaults.update(overrides)
     return ThoughtData(**defaults)

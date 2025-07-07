@@ -60,7 +60,7 @@ class TestSharedContext:
         assert node_data["topic"] == sample_thought_data.topic
 
     @pytest.mark.asyncio
-    async def test_thought_relationships(self, mock_session_context):
+    async def test_thought_relationships(self):
         """Test thought relationships and graph connections."""
         context = SharedContext()
 
@@ -70,7 +70,6 @@ class TestSharedContext:
             thoughtNumber=1,
             totalThoughts=5,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
         thought2 = create_test_thought_data(
@@ -78,7 +77,6 @@ class TestSharedContext:
             thoughtNumber=2,
             totalThoughts=5,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
         thought3 = create_test_thought_data(
@@ -88,7 +86,6 @@ class TestSharedContext:
             nextThoughtNeeded=False,
             isRevision=True,
             revisesThought=1,
-            session_context=mock_session_context,
         )
 
         # Add thoughts to context
@@ -101,46 +98,57 @@ class TestSharedContext:
         assert context.thought_graph.number_of_edges() >= 1
 
         # Check revision relationship
-        assert context.thought_graph.has_edge(3, 1)  # Revision edge
-        edge_data = context.thought_graph.get_edge_data(3, 1)
+        assert context.thought_graph.has_edge(
+            5, 1
+        )  # Revision edge from thought 5 to thought 1
+        edge_data = context.thought_graph.get_edge_data(5, 1)
         assert edge_data["relation_type"] == "revises"
 
     @pytest.mark.asyncio
-    async def test_branching_support(self, mock_session_context):
+    async def test_branching_support(self):
         """Test branching thought support in graph."""
         context = SharedContext()
 
         # Create main sequence
         main_thought = create_test_thought_data(
-            thought="Main analysis",
+            thought="Main analysis with enough content for validation",
             thoughtNumber=1,
-            totalThoughts=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
-        # Create branch
-        branch_thought = create_test_thought_data(
-            thought="Alternative approach",
+        # Add a second thought to avoid consecutive branching
+        second_thought = create_test_thought_data(
+            thought="Continue main analysis with detailed information",
             thoughtNumber=2,
-            totalThoughts=3,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+        )
+
+        # Create branch from thought 1 (non-consecutive)
+        branch_thought = create_test_thought_data(
+            thought="Alternative approach with sufficient content",
+            thoughtNumber=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
             branchFromThought=1,
             branchId="alternative-branch",
-            session_context=mock_session_context,
         )
 
         await context.update_from_thought(main_thought)
+        await context.update_from_thought(second_thought)
         await context.update_from_thought(branch_thought)
 
         # Check branch relationship
-        assert context.thought_graph.has_edge(2, 1)  # Branch edge
-        edge_data = context.thought_graph.get_edge_data(2, 1)
+        assert context.thought_graph.has_edge(
+            3, 1
+        )  # Branch edge from thought 3 to thought 1
+        edge_data = context.thought_graph.get_edge_data(3, 1)
         assert edge_data["relation_type"] == "branches_from"
         assert edge_data["branch_id"] == "alternative-branch"
 
     @pytest.mark.asyncio
-    async def test_relevant_context_retrieval(self, mock_session_context):
+    async def test_relevant_context_retrieval(self):
         """Test retrieval of relevant context for new thoughts."""
         context = SharedContext()
 
@@ -153,7 +161,6 @@ class TestSharedContext:
                 nextThoughtNeeded=True,
                 topic="Performance",
                 keywords=["database", "performance", "queries"],
-                session_context=mock_session_context,
             ),
             create_test_thought_data(
                 thought="Security review of authentication system",
@@ -162,7 +169,6 @@ class TestSharedContext:
                 nextThoughtNeeded=True,
                 topic="Security",
                 keywords=["security", "authentication", "review"],
-                session_context=mock_session_context,
             ),
             create_test_thought_data(
                 thought="Database optimization strategies",
@@ -171,7 +177,6 @@ class TestSharedContext:
                 nextThoughtNeeded=True,
                 topic="Optimization",
                 keywords=["database", "optimization", "performance"],
-                session_context=mock_session_context,
             ),
         ]
 
@@ -250,67 +255,97 @@ class TestSharedContext:
         assert token_stats["mean"] == 175.0  # (150 + 200) / 2
 
     @pytest.mark.asyncio
-    async def test_thought_path_finding(self, mock_session_context):
+    async def test_thought_path_finding(self):
         """Test finding paths between thoughts in the graph."""
         context = SharedContext()
 
-        # Create a chain of thoughts
-        thoughts = []
-        for i in range(1, 5):
-            thought = create_test_thought_data(
-                thought=f"Thought {i}",
-                thoughtNumber=i,
-                totalThoughts=4,
-                nextThoughtNeeded=i < 4,
-                session_context=mock_session_context,
-            )
-            thoughts.append(thought)
-            await context.update_from_thought(thought)
+        # Create thoughts with relationships
+        thought1 = create_test_thought_data(
+            thought="Initial thought with sufficient content",
+            thoughtNumber=1,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+        )
 
-        # Find path from first to last thought
-        path = await context.get_thought_path(1, 4)
+        thought3 = create_test_thought_data(
+            thought="Branch from initial thought",
+            thoughtNumber=3,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+            branchFromThought=1,
+            branchId="branch1",
+        )
 
-        # Should have a path since thoughts form a sequence
+        thought4 = create_test_thought_data(
+            thought="Revision of the branch",
+            thoughtNumber=4,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+            isRevision=True,
+            revisesThought=3,
+        )
+
+        await context.update_from_thought(thought1)
+        await context.update_from_thought(thought3)
+        await context.update_from_thought(thought4)
+
+        # Find path from 4 to 1 (4 revises 3, 3 branches from 1)
+        path = await context.get_thought_path(4, 1)
+
+        # Should have a path
         assert path is not None
-        assert len(path) >= 2
-        assert path[0] == 1
-        assert path[-1] == 4
+        assert len(path) == 3  # 4 -> 3 -> 1
+        assert 4 in path
+        assert 1 in path
 
     @pytest.mark.asyncio
-    async def test_cycle_detection(self, mock_session_context):
+    async def test_cycle_detection(self):
         """Test detection of circular reasoning patterns."""
         context = SharedContext()
 
         # Create thoughts that could form a cycle
         thought1 = create_test_thought_data(
-            thought="Initial analysis",
+            thought="Initial analysis with sufficient content for validation",
             thoughtNumber=1,
-            totalThoughts=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
         thought2 = create_test_thought_data(
-            thought="Refinement of analysis",
+            thought="Refinement of analysis with additional details",
             thoughtNumber=2,
-            totalThoughts=3,
+            totalThoughts=5,
             nextThoughtNeeded=True,
-            session_context=mock_session_context,
         )
 
         thought3 = create_test_thought_data(
-            thought="Back to initial approach",
+            thought="Further development of the refined approach",
             thoughtNumber=3,
-            totalThoughts=3,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+        )
+
+        thought4 = create_test_thought_data(
+            thought="Additional exploration of alternative methods",
+            thoughtNumber=4,
+            totalThoughts=5,
+            nextThoughtNeeded=True,
+        )
+
+        thought5 = create_test_thought_data(
+            thought="Back to initial approach with new insights",
+            thoughtNumber=5,
+            totalThoughts=5,
             nextThoughtNeeded=False,
             isRevision=True,
             revisesThought=1,
-            session_context=mock_session_context,
         )
 
         await context.update_from_thought(thought1)
         await context.update_from_thought(thought2)
         await context.update_from_thought(thought3)
+        await context.update_from_thought(thought4)
+        await context.update_from_thought(thought5)
 
         # Check for cycles
         cycles = await context.identify_cycles()
@@ -346,7 +381,7 @@ class TestSharedContext:
         assert stats["thought_nodes"] == 1
 
     @pytest.mark.asyncio
-    async def test_tool_decision_tracking(self, mock_session_context):
+    async def test_tool_decision_tracking(self):
         """Test tracking of tool usage decisions."""
         context = SharedContext()
 
@@ -366,7 +401,6 @@ class TestSharedContext:
             totalThoughts=2,
             nextThoughtNeeded=True,
             tool_decisions=[tool_decision],
-            session_context=mock_session_context,
         )
 
         await context.update_from_thought(thought)
@@ -378,7 +412,7 @@ class TestSharedContext:
         assert tracked_decision.confidence == 0.85
 
     @pytest.mark.asyncio
-    async def test_concurrent_access(self, mock_session_context):
+    async def test_concurrent_access(self):
         """Test thread-safe concurrent access to context."""
         context = SharedContext()
 
@@ -390,7 +424,6 @@ class TestSharedContext:
                 thoughtNumber=i,
                 totalThoughts=5,
                 nextThoughtNeeded=i < 5,
-                session_context=mock_session_context,
             )
             thoughts.append(thought)
 

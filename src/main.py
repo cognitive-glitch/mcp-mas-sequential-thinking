@@ -15,7 +15,6 @@ Key Features:
 """
 
 import time
-import uuid
 import asyncio
 import logging
 import json
@@ -31,6 +30,7 @@ from mcp.server.fastmcp import FastMCP
 from agno.agent import Agent
 from agno.tools.exa import ExaTools
 from agno.tools.thinking import ThinkingTools
+from agno.models.message import Message
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
@@ -39,13 +39,11 @@ from models.thought_models import (
     ThoughtData,
     ProcessedThought,
     ThoughtSequenceReview,
-    SessionContext,
     DomainType,
     BranchAnalysis,
 )
 from providers.base import LLMProviderFactory
 from context.shared_context import SharedContext
-from tools.tool_selector import ToolSelector
 
 import logging.handlers
 
@@ -135,20 +133,20 @@ class AsyncTeam:
                 synthesis = f"Team {self.name} could not process the request due to agent failures."
 
             # Return a mock response object that mimics Agno's response
-            class MockResponse:
+            class MockResponseInner:
                 def __init__(self, content: str):
                     self.content = content
 
-            return MockResponse(synthesis)
+            return MockResponseInner(synthesis)
 
         except Exception as e:
             logger.error(f"AsyncTeam {self.name} execution failed: {e}")
 
-            class MockResponse:
+            class MockResponseError:
                 def __init__(self, content: str):
                     self.content = content
 
-            return MockResponse(f"Team processing error: {str(e)}")
+            return MockResponseError(f"Team processing error: {str(e)}")
 
     async def _run_agent_safe(self, agent: Agent, input_prompt: str) -> str:
         """Safely run an agent with timeout and error handling."""
@@ -160,7 +158,9 @@ class AsyncTeam:
 
                 # Use aresponse method for OpenAI models (from agno)
                 if hasattr(agent.model, "aresponse"):
-                    response = await agent.model.aresponse(formatted_prompt)
+                    # Create message list for agno models
+                    messages = [Message(role="user", content=formatted_prompt)]
+                    response = await agent.model.aresponse(messages)
                     if hasattr(response, "content"):
                         return str(response.content)
                     else:
@@ -212,7 +212,6 @@ class ErrorType(Enum):
     VALIDATION_ERROR = "validation_error"
     CONTEXT_ERROR = "context_error"
     TIMEOUT_ERROR = "timeout_error"
-    TOOL_SELECTION_ERROR = "tool_selection_error"
 
 
 class ErrorSeverity(Enum):
@@ -366,11 +365,6 @@ class EnhancedErrorHandler:
                 return "Model communication temporarily unavailable. Please try again later."
             return "Communication error with AI model. Retrying with fallback settings."
 
-        elif error_context.error_type == ErrorType.TOOL_SELECTION_ERROR:
-            return (
-                "Tool selection failed. Proceeding with default tool recommendations."
-            )
-
         return None
 
     def get_error_summary(self) -> Dict[str, Any]:
@@ -419,21 +413,16 @@ class EnhancedAppContext:
 
     def __init__(self):
         """Initialize the enhanced application context with all components."""
-        self.session_id = str(uuid.uuid4())
         self.start_time = datetime.now()
 
         # Initialize components
         self.shared_context = SharedContext()  # Simple in-memory context
         self.error_handler = EnhancedErrorHandler()
-        self.tool_selector = ToolSelector()
 
-        # Session context
-        self.session_context = SessionContext(
-            session_id=self.session_id,
-            available_tools=["ThinkingTools", "ExaTools"],
-            session_topic="Reflective Thinking Session",
-            session_domain=DomainType.GENERAL,
-        )
+        # Available tools
+        self.available_tools = ["ThinkingTools", "ExaTools"]
+        self.current_topic = "Reflective Thinking Session"
+        self.current_domain = DomainType.GENERAL
 
         # Initialize provider and models
         try:
@@ -460,9 +449,7 @@ class EnhancedAppContext:
         # Available MCP tools tracking
         self.available_mcp_tools: List[str] = []
 
-        logger.info(
-            f"Enhanced app context initialized with session ID: {self.session_id}"
-        )
+        logger.info("Enhanced app context initialized")
 
     async def initialize_teams(self):
         """Initialize both primary and reflection teams asynchronously."""
@@ -794,15 +781,12 @@ class EnhancedAppContext:
                 self.branches[thought_data.branchId] = []
             self.branches[thought_data.branchId].append(thought_data)
 
-        # Update session context
-        if (
-            thought_data.topic
-            and thought_data.topic != self.session_context.session_topic
-        ):
-            self.session_context.session_topic = thought_data.topic
+        # Update context if topic/domain changes
+        if thought_data.topic and thought_data.topic != self.current_topic:
+            self.current_topic = thought_data.topic
 
-        if thought_data.domain != self.session_context.session_domain:
-            self.session_context.session_domain = thought_data.domain
+        if thought_data.domain != self.current_domain:
+            self.current_domain = thought_data.domain
 
     async def get_relevant_context(self, thought: str) -> Dict[str, Any]:
         """Get context relevant to the current thought."""
@@ -814,7 +798,6 @@ class EnhancedAppContext:
         error_summary = self.error_handler.get_error_summary()
 
         return {
-            "session_id": self.session_id,
             "duration_seconds": (datetime.now() - self.start_time).total_seconds(),
             "total_thoughts": len(self.thought_history),
             "total_branches": len(self.branches),
@@ -826,7 +809,7 @@ class EnhancedAppContext:
     def update_available_tools(self, tools: List[str]):
         """Update the list of available MCP tools."""
         self.available_mcp_tools = tools
-        self.session_context.available_tools = tools
+        self.available_tools = tools
         logger.info(f"Updated available tools: {tools}")
 
     def cleanup(self):
@@ -865,9 +848,8 @@ async def process_thought_with_dual_teams(
         # Generate tool recommendations if not provided
         if not thought_data.current_step:
             try:
-                tool_recommendation = context.tool_selector.recommend_tools(
-                    thought_data, context.available_mcp_tools
-                )
+                # Tool recommendation functionality is now integrated directly
+                tool_recommendation = None
                 thought_data.current_step = tool_recommendation
             except Exception as e:
                 logger.warning(f"Tool selection failed: {e}")
@@ -996,12 +978,8 @@ Based on both analyses, the recommended approach is to proceed with the insights
 
         # Record tool effectiveness if tools were used
         if thought_data.current_step and thought_data.current_step.recommended_tools:
-            # Simple effectiveness based on response quality
-            effectiveness = 0.8 if "error" not in integrated_response.lower() else 0.4
-            for tool_rec in thought_data.current_step.recommended_tools:
-                context.tool_selector.record_tool_effectiveness(
-                    tool_rec.tool_name, effectiveness
-                )
+            # Tool effectiveness tracking removed (was in ToolSelector)
+            pass
 
         # Create processed thought
         return ProcessedThought(
@@ -1050,7 +1028,7 @@ Based on both analyses, the recommended approach is to proceed with the insights
 
 
 async def generate_sequence_review(
-    session_id: str, context: EnhancedAppContext
+    context: EnhancedAppContext,
 ) -> ThoughtSequenceReview:
     """Generate a comprehensive review of the thought sequence."""
     try:
@@ -1113,7 +1091,7 @@ async def generate_sequence_review(
                 )
 
         # Tool effectiveness
-        tool_stats = context.tool_selector.get_tool_statistics()
+        tool_stats = {}  # Tool statistics removed (was in ToolSelector)
         tool_effectiveness = {
             name: stats.get("avg_effectiveness", 0.5)
             for name, stats in tool_stats.items()
@@ -1157,7 +1135,6 @@ async def generate_sequence_review(
                 topic_alignment = 1.0 - (len(unique_topics) - 1) / len(topics)
 
         return ThoughtSequenceReview(
-            session_id=session_id,
             total_thoughts=total_thoughts,
             total_branches=len(context.branches),
             overall_quality=overall_quality,
@@ -1184,7 +1161,6 @@ async def generate_sequence_review(
         logger.error(f"Failed to generate sequence review: {e}")
         # Return minimal review on error
         return ThoughtSequenceReview(
-            session_id=session_id,
             total_thoughts=len(context.thought_history),
             total_branches=len(context.branches),
             overall_quality=0.5,
@@ -1203,16 +1179,87 @@ async def generate_sequence_review(
 
 
 @mcp.tool()
-async def reflectivethinking(thought_data: ThoughtData) -> str:
+async def reflectivethinking(
+    thought: str,
+    next_thought_needed: bool,
+    thought_number: int,
+    total_thoughts: int,
+    is_revision: bool = False,
+    revises_thought: Optional[int] = None,
+    branch_from_thought: Optional[int] = None,
+    branch_id: Optional[str] = None,
+    needs_more_thoughts: bool = False,
+    current_step: Optional[Dict[str, Any]] = None,
+    previous_steps: Optional[List[Dict[str, Any]]] = None,
+    remaining_steps: Optional[List[str]] = None,
+) -> str:
     """
-    Enhanced tool for dynamic and reflective problem-solving through sequential thoughts.
-    Includes dual-team processing, tool recommendations, and comprehensive error handling.
+    A detailed tool for dynamic and reflective problem-solving through thoughts.
+    This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
+    Each thought can build on, question, or revise previous insights as understanding deepens.
+
+    Includes:
+    - Dual-team processing (Primary thinking team + Reflection team)
+    - Integrated tool recommendations based on thought content
+    - Support for revision and branching
+    - Comprehensive error handling
     """
-    logger.info(f"Processing thought #{thought_data.thoughtNumber}")
+    logger.info(f"Processing thought #{thought_number}")
 
     try:
-        # Set session context if not already set
-        thought_data.session_context = app_context.session_context
+        # Convert current_step from dict to StepRecommendation if provided
+        step_recommendation = None
+        if current_step:
+            from models.thought_models import StepRecommendation, ToolRecommendation
+
+            # Convert tool recommendations
+            tool_recs = []
+            for tool in current_step.get("recommended_tools", []):
+                tool_recs.append(
+                    ToolRecommendation(
+                        tool_name=tool["tool_name"],
+                        confidence=tool["confidence"],
+                        rationale=tool["rationale"],
+                        priority=tool["priority"],
+                        suggested_inputs=tool.get("suggested_inputs"),
+                        alternatives=tool.get("alternatives", []),
+                        expected_outcome=tool.get("expected_outcome", ""),
+                        risk_assessment=None,
+                        execution_time_estimate=None,
+                    )
+                )
+
+            step_recommendation = StepRecommendation(
+                step_description=current_step["step_description"],
+                recommended_tools=tool_recs,
+                expected_outcome=current_step["expected_outcome"],
+                next_step_conditions=current_step.get("next_step_conditions", []),
+            )
+
+        # Create ThoughtData from parameters
+        thought_data = ThoughtData(
+            thought=thought,
+            thoughtNumber=thought_number,
+            totalThoughts=total_thoughts,
+            nextThoughtNeeded=next_thought_needed,
+            isRevision=is_revision,
+            revisesThought=revises_thought,
+            branchFromThought=branch_from_thought,
+            branchId=branch_id,
+            needsMoreThoughts=needs_more_thoughts,
+            current_step=step_recommendation,
+            previous_steps=[],  # TODO: Convert previous_steps if needed
+            remaining_steps=remaining_steps or [],
+            # Defaults for other fields
+            domain=DomainType.GENERAL,
+            keywords=[],
+            confidence_score=0.5,
+            timestamp_ms=int(time.time() * 1000),
+            topic=None,
+            subject=None,
+            reflection_feedback=None,
+            processing_time_ms=0,
+        )
 
         # Process through dual teams
         result = await process_thought_with_dual_teams(thought_data, app_context)
@@ -1224,24 +1271,24 @@ async def reflectivethinking(thought_data: ThoughtData) -> str:
         response_parts.append(result.integrated_response)
 
         # Add guidance for next steps
-        if thought_data.nextThoughtNeeded:
+        if next_thought_needed:
             response_parts.append(
                 f"\n## Next Step Guidance\n{result.next_step_guidance}"
             )
 
-            # Add tool recommendations for next step if available
-            if thought_data.current_step:
+            # Add tool recommendations if available
+            if step_recommendation:
                 response_parts.append("\n## Recommended Tools for Next Step:")
-                for tool in thought_data.current_step.recommended_tools[:3]:
+                for tool in step_recommendation.recommended_tools[:3]:
                     response_parts.append(
                         f"- **{tool.tool_name}** (confidence: {tool.confidence:.2f}): {tool.rationale}"
                     )
 
         # Add performance metrics if this is a final thought
-        if not thought_data.nextThoughtNeeded:
+        if not next_thought_needed:
             metrics = await app_context.get_performance_metrics()
             response_parts.append(
-                f"\n## Session Summary\n"
+                f"\n## Summary\n"
                 f"- Total thoughts: {metrics['total_thoughts']}\n"
                 f"- Duration: {metrics['duration_seconds']:.1f}s\n"
                 f"- Overall quality: {result.quality_score:.2f}"
@@ -1251,36 +1298,31 @@ async def reflectivethinking(thought_data: ThoughtData) -> str:
 
     except ValidationError as e:
         error_msg = app_context.error_handler.handle_error(
-            e, ErrorType.VALIDATION_ERROR, thought_data.thoughtNumber
+            e, ErrorType.VALIDATION_ERROR, thought_number
         )
         logger.error(f"Validation error: {e}")
         return f"Validation Error: {error_msg}\n\nDetails: {str(e)}"
 
     except Exception as e:
         error_msg = app_context.error_handler.handle_error(
-            e, ErrorType.TEAM_PROCESSING, thought_data.thoughtNumber
+            e, ErrorType.TEAM_PROCESSING, thought_number
         )
         logger.error(f"Unexpected error: {e}")
         return f"Error: {error_msg}\n\nPlease try again with a simpler thought."
 
 
 @mcp.tool()
-async def reflectivereview(session_id: Optional[str] = None) -> str:
+async def reflectivereview() -> str:
     """
     Generate a comprehensive review of the thought sequence with quality metrics.
     """
     try:
-        # Use current session if no ID provided
-        if not session_id:
-            session_id = app_context.session_id
-
         # Generate review
-        review = await generate_sequence_review(session_id, app_context)
+        review = await generate_sequence_review(app_context)
 
         # Format review for output
         output = [
             "# Thought Sequence Review",
-            f"**Session ID**: {review.session_id}",
             f"**Total Thoughts**: {review.total_thoughts}",
             f"**Total Branches**: {review.total_branches}",
             f"**Overall Quality**: {review.overall_quality:.2f}",
@@ -1330,128 +1372,6 @@ async def reflectivereview(session_id: Optional[str] = None) -> str:
     except Exception as e:
         logger.error(f"Failed to generate review: {e}")
         return f"Error generating review: {str(e)}"
-
-
-@mcp.tool()
-async def toolselectthinking(
-    thought: str,
-    available_tools: Optional[List[str]] = None,
-    domain: str = "general",
-    context: Optional[Dict[str, Any]] = None,
-) -> str:
-    """
-    Intelligent tool selection for a given thought or task.
-    Analyzes the thought and recommends appropriate MCP tools with confidence scores.
-
-    Args:
-        thought: The current thought or task description
-        available_tools: List of available tool names (if None, uses known tools)
-        domain: Domain context (general, technical, creative, analytical, strategic, research)
-        context: Additional context for tool selection
-
-    Returns:
-        Tool recommendations with confidence scores and rationale
-    """
-    try:
-        # Create minimal thought data for analysis
-        thought_data = ThoughtData(
-            thought=thought,
-            thoughtNumber=1,
-            totalThoughts=1,
-            nextThoughtNeeded=False,
-            domain=DomainType(domain.lower())
-            if domain.lower() in [d.value for d in DomainType]
-            else DomainType.GENERAL,
-            keywords=[],  # Will be extracted by tool selector
-            isRevision=False,
-            needsMoreThoughts=False,
-            session_context=app_context.session_context,
-            topic=None,
-            subject=None,
-            revisesThought=None,
-            branchFromThought=None,
-            branchId=None,
-            current_step=None,
-            reflection_feedback=None,
-            confidence_score=0.5,
-            timestamp_ms=int(time.time() * 1000),
-            processing_time_ms=0,
-        )
-
-        # Update available tools if provided
-        if available_tools:
-            app_context.update_available_tools(available_tools)
-
-        # Get tool recommendations
-        recommendations = app_context.tool_selector.recommend_tools(
-            thought_data,
-            available_tools or app_context.available_mcp_tools,
-            max_recommendations=5,
-        )
-
-        # Format output
-        output = [
-            "# Tool Recommendations for Task",
-            f"**Task**: {thought[:200]}...",
-            f"**Domain**: {domain}",
-            "",
-            "## Recommended Tools",
-        ]
-
-        for i, tool_rec in enumerate(recommendations.recommended_tools, 1):
-            output.append(
-                f"\n### {i}. {tool_rec.tool_name}\n"
-                f"**Confidence**: {tool_rec.confidence:.2f}\n"
-                f"**Priority**: {tool_rec.priority}\n"
-                f"**Rationale**: {tool_rec.rationale}\n"
-                f"**Expected Outcome**: {tool_rec.expected_outcome}"
-            )
-
-            if tool_rec.suggested_inputs:
-                output.append("**Suggested Inputs**:")
-                for key, value in tool_rec.suggested_inputs.items():
-                    output.append(f"  - {key}: {value}")
-
-            if tool_rec.alternatives:
-                output.append(f"**Alternatives**: {', '.join(tool_rec.alternatives)}")
-
-        # Add step information
-        output.extend(
-            [
-                "",
-                "## Step Information",
-                f"**Description**: {recommendations.step_description}",
-                f"**Expected Outcome**: {recommendations.expected_outcome}",
-            ]
-        )
-
-        if recommendations.validation_criteria:
-            output.extend(["", "**Validation Criteria**:"])
-            for criterion in recommendations.validation_criteria:
-                output.append(f"- {criterion}")
-
-        # Add tool statistics if available
-        tool_stats = app_context.tool_selector.get_tool_statistics()
-        if tool_stats:
-            output.extend(["", "## Historical Tool Performance"])
-            for tool_name, stats in tool_stats.items():
-                if tool_name in [
-                    t.tool_name for t in recommendations.recommended_tools
-                ]:
-                    output.append(
-                        f"- **{tool_name}**: "
-                        f"Used {stats['usage_count']} times, "
-                        f"Avg effectiveness: {stats['avg_effectiveness']:.2f}"
-                    )
-
-        return "\n".join(output)
-
-    except Exception as e:
-        error_msg = app_context.error_handler.handle_error(
-            e, ErrorType.TOOL_SELECTION_ERROR
-        )
-        logger.error(f"Tool selection error: {e}")
-        return f"Error in tool selection: {error_msg}\n\nFallback: Consider using ThinkingTools for general analysis."
 
 
 # MCP Prompts for common workflows
@@ -1509,11 +1429,12 @@ Proceed with the first thought based on these guidelines."""
 @mcp.prompt("tool-selection")
 def tool_selection_prompt(task: str, available_tools: Optional[str] = None):
     """
-    Prompt for intelligent tool selection and recommendation for a given task.
+    Prompt for intelligent tool selection integrated with reflective thinking.
+    Tool recommendations are now part of the main reflectivethinking tool.
     """
     tools_context = f"\nAvailable tools: {available_tools}" if available_tools else ""
 
-    user_prompt_text = f"""I need help selecting the right tools for this task:
+    user_prompt_text = f"""I need help with tool selection for this task. Use the reflectivethinking tool with integrated tool recommendations.
 
 Task: {task}{tools_context}
 
@@ -1558,15 +1479,12 @@ Let me analyze your task now..."""
 
 
 @mcp.prompt("thought-review")
-def thought_review_prompt(session_id: Optional[str] = None):
+def thought_review_prompt():
     """
     Prompt to review and summarize a sequential thinking session.
     """
-    session_context = (
-        f" for session {session_id}" if session_id else " for the current session"
-    )
 
-    user_prompt_text = f"""Please review and summarize the sequential thinking process{session_context}.
+    user_prompt_text = """Please review and summarize the sequential thinking process.
 
 I'd like to understand:
 - Key insights discovered
