@@ -30,7 +30,7 @@ class TestRealWorldScenarios:
     @pytest.fixture
     def mock_context_with_team(self, mock_team_response_factory):
         """Create a mock context with functioning team."""
-        from main import AppContext
+        from main import EnhancedAppContext as AppContext
 
         context = AppContext()
 
@@ -73,9 +73,9 @@ class TestRealWorldScenarios:
 
         mock_team = AsyncMock()
         mock_team.arun = smart_team_response
-        context.team = mock_team
         context.primary_team = mock_team
         context.reflection_team = mock_team
+        context.teams_initialized = True
 
         return context
 

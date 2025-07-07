@@ -10,7 +10,7 @@ import networkx as nx
 from src.context.shared_context import SharedContext
 from src.models.thought_models import (
     ToolDecision,
-    ThoughtRelationship,
+    ThoughtRelation,
 )
 from .conftest import create_test_thought_data
 
@@ -84,22 +84,22 @@ class TestSharedContextAdvanced:
 
         # Add explicit relationships
         thought_relations = [
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=1, to_thought=2, relation_type="leads_to", strength=0.9
             ),
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=2, to_thought=3, relation_type="leads_to", strength=0.8
             ),
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=1, to_thought=4, relation_type="leads_to", strength=0.7
             ),
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=4, to_thought=5, relation_type="leads_to", strength=0.8
             ),
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=3, to_thought=6, relation_type="leads_to", strength=0.9
             ),
-            ThoughtRelationship(
+            ThoughtRelation(
                 from_thought=5, to_thought=6, relation_type="leads_to", strength=0.8
             ),
         ]
@@ -293,13 +293,13 @@ class TestSharedContextAdvanced:
             thoughtNumber=4,
             session_context=mock_session_context,
             thought_relationships=[
-                ThoughtRelationship(
+                ThoughtRelation(
                     from_thought=2,
                     to_thought=4,
                     relation_type="merges_to",
                     strength=0.8,
                 ),
-                ThoughtRelationship(
+                ThoughtRelation(
                     from_thought=3,
                     to_thought=4,
                     relation_type="merges_to",
@@ -375,6 +375,8 @@ class TestSharedContextAdvanced:
                 rationale="Test",
                 alternatives_considered=[],
                 confidence=0.8,
+                outcome="Test outcome",
+                execution_time_ms=1000,
             )
             context.tool_usage_history.append(decision)
 
@@ -401,6 +403,8 @@ class TestSharedContextAdvanced:
                 rationale="Test",
                 alternatives_considered=[],
                 confidence=0.8,
+                outcome="Test outcome",
+                execution_time_ms=1000,
             )
         )
 

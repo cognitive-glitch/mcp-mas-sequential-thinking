@@ -11,7 +11,7 @@ from main import (
     reflectivethinking,
     toolselectthinking,
     reflectivereview,
-    AppContext,
+    EnhancedAppContext as AppContext,
 )
 
 
@@ -48,7 +48,7 @@ class TestMCPEndpoints:
     @pytest.fixture
     def mock_app_context(self, mock_team_response):
         """Create a mock app context for testing."""
-        from main import AppContext
+        # AppContext is already imported as EnhancedAppContext
 
         context = AppContext()
 
@@ -58,9 +58,9 @@ class TestMCPEndpoints:
 
         # Patch the team initialization
         with patch.object(context, "initialize_teams", new_callable=AsyncMock):
-            context.team = mock_team
-            context.reflection_team = mock_team
             context.primary_team = mock_team
+            context.reflection_team = mock_team
+            context.teams_initialized = True
 
         return context
 
@@ -389,10 +389,14 @@ class TestMCPEndpoints:
         mock_team.arun = AsyncMock(return_value=Mock(content="Test response"))
 
         with patch.object(context1, "initialize_teams", new_callable=AsyncMock):
-            context1.team = mock_team
+            context1.primary_team = mock_team
+            context1.reflection_team = mock_team
+            context1.teams_initialized = True
 
         with patch.object(context2, "initialize_teams", new_callable=AsyncMock):
-            context2.team = mock_team
+            context2.primary_team = mock_team
+            context2.reflection_team = mock_team
+            context2.teams_initialized = True
 
         # Use context1
         with patch("main.app_context", context1):
