@@ -7,7 +7,7 @@ import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
-from main import (
+from src.main import (
     reflectivethinking,
     toolselectthinking,
     reflectivereview,
@@ -67,7 +67,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_reflectivethinking_basic_flow(self, mock_app_context):
         """Test basic reflective thinking flow."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # First thought
             result = await reflectivethinking(
                 thought="Analyze the requirements for a distributed cache system",
@@ -89,7 +89,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_reflectivethinking_with_revision(self, mock_app_context):
         """Test reflective thinking with revision."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # Initial thought
             await reflectivethinking(
                 thought="Design a simple key-value store",
@@ -114,7 +114,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_reflectivethinking_with_branching(self, mock_app_context):
         """Test reflective thinking with branching."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # Initial thought
             await reflectivethinking(
                 thought="Implement user authentication",
@@ -158,7 +158,7 @@ class TestMCPEndpoints:
     async def test_reflectivethinking_error_handling(self, mock_app_context):
         """Test error handling in reflective thinking."""
         # Test with invalid thought number
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             result = await reflectivethinking(
                 thought="Test thought",
                 thoughtNumber=0,  # Invalid
@@ -170,7 +170,7 @@ class TestMCPEndpoints:
             assert "thought number must be >= 1" in result.lower()
 
         # Test with revision without target
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             result = await reflectivethinking(
                 thought="Revise something",
                 thoughtNumber=2,
@@ -185,7 +185,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_toolselectthinking_basic(self, mock_app_context):
         """Test basic tool selection functionality."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             result = await toolselectthinking(
                 thought="I need to analyze code performance and find bottlenecks",
                 available_tools=[
@@ -207,7 +207,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_toolselectthinking_with_context(self, mock_app_context):
         """Test tool selection with context from previous thoughts."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # First, create some context
             await reflectivethinking(
                 thought="Optimize database queries",
@@ -231,7 +231,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_reflectivereview_basic(self, mock_app_context):
         """Test basic review functionality."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # Create a thinking session
             for i in range(1, 4):
                 await reflectivethinking(
@@ -252,7 +252,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_reflectivereview_with_branches(self, mock_app_context):
         """Test review with branched thinking paths."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # Create main path
             await reflectivethinking(
                 thought="Design API architecture",
@@ -289,7 +289,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_full_workflow_integration(self, mock_app_context):
         """Test complete workflow: think -> select tools -> implement -> review."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # 1. Initial analysis
             thought1 = await reflectivethinking(
                 thought="Plan implementation of a real-time notification system",
@@ -360,7 +360,7 @@ class TestMCPEndpoints:
     @pytest.mark.asyncio
     async def test_concurrent_sessions(self, mock_app_context):
         """Test handling of concurrent thinking sessions."""
-        with patch("main.app_context", mock_app_context):
+        with patch("src.main.app_context", mock_app_context):
             # Run multiple thoughts concurrently
             tasks = []
             for i in range(1, 4):
@@ -399,7 +399,7 @@ class TestMCPEndpoints:
             context2.teams_initialized = True
 
         # Use context1
-        with patch("main.app_context", context1):
+        with patch("src.main.app_context", context1):
             await reflectivethinking(
                 thought="Session 1 thought",
                 thoughtNumber=1,
@@ -408,7 +408,7 @@ class TestMCPEndpoints:
             )
 
         # Use context2
-        with patch("main.app_context", context2):
+        with patch("src.main.app_context", context2):
             await reflectivethinking(
                 thought="Session 2 thought",
                 thoughtNumber=1,
@@ -429,7 +429,7 @@ class TestMCPPrompts:
 
     def test_sequential_thinking_prompt(self):
         """Test sequential thinking prompt generation."""
-        from main import sequential_thinking_prompt
+        from src.main import sequential_thinking_prompt
 
         result = sequential_thinking_prompt(
             problem="Design a distributed task queue",
@@ -455,7 +455,7 @@ class TestMCPPrompts:
 
     def test_tool_selection_prompt(self):
         """Test tool selection prompt generation."""
-        from main import tool_selection_prompt
+        from src.main import tool_selection_prompt
 
         result = tool_selection_prompt(
             task="Analyze Python code for security vulnerabilities",
@@ -471,7 +471,7 @@ class TestMCPPrompts:
 
     def test_thought_review_prompt(self):
         """Test thought review prompt generation."""
-        from main import thought_review_prompt
+        from src.main import thought_review_prompt
 
         result = thought_review_prompt(session_id="test-session-123")
 
@@ -483,7 +483,7 @@ class TestMCPPrompts:
 
     def test_complex_problem_prompt(self):
         """Test complex problem prompt generation."""
-        from main import complex_problem_prompt
+        from src.main import complex_problem_prompt
 
         result = complex_problem_prompt(
             problem="Migrate monolith to microservices",

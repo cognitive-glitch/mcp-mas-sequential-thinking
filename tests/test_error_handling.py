@@ -7,7 +7,7 @@ import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
-from main import (
+from src.main import (
     EnhancedErrorHandler as ErrorHandler,
     ErrorType,
     CircuitBreaker,
@@ -223,7 +223,7 @@ class TestMCPErrorHandling:
         self, mock_app_context_with_errors
     ):
         """Test reflectivethinking handles team failures gracefully."""
-        with patch("main.app_context", mock_app_context_with_errors):
+        with patch("src.main.app_context", mock_app_context_with_errors):
             result = await reflectivethinking(
                 thought="Test thought",
                 thoughtNumber=1,
@@ -240,7 +240,7 @@ class TestMCPErrorHandling:
         """Test handling of validation errors."""
         context = AppContext()
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # Invalid thought number
             result = await reflectivethinking(
                 thought="Test",
@@ -269,7 +269,7 @@ class TestMCPErrorHandling:
         self, mock_app_context_with_errors
     ):
         """Test toolselectthinking handles failures gracefully."""
-        with patch("main.app_context", mock_app_context_with_errors):
+        with patch("src.main.app_context", mock_app_context_with_errors):
             result = await toolselectthinking(
                 thought="Select tools for task",
                 available_tools=["tool1", "tool2"],
@@ -283,7 +283,7 @@ class TestMCPErrorHandling:
         """Test review handles empty sessions gracefully."""
         context = AppContext()
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             result = await reflectivereview()
 
             # Should handle empty session
@@ -304,7 +304,7 @@ class TestMCPErrorHandling:
         context.reflection_team = mock_team
         context.teams_initialized = True
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # This should timeout (if timeout is implemented)
             result = await reflectivethinking(
                 thought="Test timeout",
@@ -321,7 +321,7 @@ class TestMCPErrorHandling:
         """Test handling of memory limits."""
         context = AppContext()
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # Create many thoughts to test memory limits
             for i in range(100):
                 await reflectivethinking(
@@ -359,7 +359,7 @@ class TestMCPErrorHandling:
         context.reflection_team = mock_team
         context.teams_initialized = True
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # Run concurrent requests
             tasks = []
             for i in range(10):
@@ -390,7 +390,7 @@ class TestMCPErrorHandling:
         """Test handling of malformed inputs."""
         context = AppContext()
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # Test with None values
             result = await reflectivethinking(
                 thought=None,  # Invalid
@@ -429,7 +429,7 @@ class TestMCPErrorHandling:
 
         context.initialize_teams = init_fail
 
-        with patch("main.app_context", context):
+        with patch("src.main.app_context", context):
             # Should still work without teams
             result = await reflectivethinking(
                 thought="Test without teams",

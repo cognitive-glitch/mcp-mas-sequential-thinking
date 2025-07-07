@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import logging
 from collections import defaultdict
 import networkx as nx
-from src.models.thought_models import ThoughtData, ToolDecision
+from models.thought_models import ThoughtData, ToolDecision
 
 logger = logging.getLogger(__name__)
 

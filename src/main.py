@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 # Enhanced local imports
-from src.models.thought_models import (
+from models.thought_models import (
     ThoughtData,
     ProcessedThought,
     ThoughtSequenceReview,
@@ -44,9 +44,9 @@ from src.models.thought_models import (
     DomainType,
     BranchAnalysis,
 )
-from src.providers.base import LLMProviderFactory
-from src.context.shared_context import SharedContext
-from src.tools.tool_selector import ToolSelector
+from providers.base import LLMProviderFactory
+from context.shared_context import SharedContext
+from tools.tool_selector import ToolSelector
 
 import logging.handlers
 

@@ -6,7 +6,7 @@ Tests complete workflows and edge cases.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
-from main import (
+from src.main import (
     reflectivethinking,
     toolselectthinking,
     reflectivereview,
@@ -30,7 +30,7 @@ class TestRealWorldScenarios:
     @pytest.fixture
     def mock_context_with_team(self, mock_team_response_factory):
         """Create a mock context with functioning team."""
-        from main import EnhancedAppContext as AppContext
+        from src.main import EnhancedAppContext as AppContext
 
         context = AppContext()
 
@@ -82,7 +82,7 @@ class TestRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_software_architecture_design_scenario(self, mock_context_with_team):
         """Test complete software architecture design workflow."""
-        with patch("main.app_context", mock_context_with_team):
+        with patch("src.main.app_context", mock_context_with_team):
             # 1. Initial requirements analysis
             thought1 = await reflectivethinking(
                 thought="Design a scalable e-commerce platform architecture supporting 1M daily users",
@@ -179,7 +179,7 @@ class TestRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_debugging_complex_issue_scenario(self, mock_context_with_team):
         """Test debugging a complex production issue."""
-        with patch("main.app_context", mock_context_with_team):
+        with patch("src.main.app_context", mock_context_with_team):
             # 1. Initial bug report
             thought1 = await reflectivethinking(
                 thought="Debug production issue: API response times spike to 10s during peak hours",
@@ -239,7 +239,7 @@ class TestRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_creative_writing_scenario(self, mock_context_with_team):
         """Test creative writing workflow (non-technical domain)."""
-        with patch("main.app_context", mock_context_with_team):
+        with patch("src.main.app_context", mock_context_with_team):
             # Different domain type
             result = await reflectivethinking(
                 thought="Develop a plot outline for a science fiction novel about AI consciousness",
@@ -291,7 +291,7 @@ class TestRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_long_running_analysis_scenario(self, mock_context_with_team):
         """Test handling of long-running analysis with many thoughts."""
-        with patch("main.app_context", mock_context_with_team):
+        with patch("src.main.app_context", mock_context_with_team):
             thoughts = []
 
             # Simulate a long analysis process
@@ -335,7 +335,7 @@ class TestRealWorldScenarios:
 
         error_context.team.arun = failing_arun
 
-        with patch("main.app_context", error_context):
+        with patch("src.main.app_context", error_context):
             # First thought should work
             thought1 = await reflectivethinking(
                 thought="Start analysis",
@@ -369,7 +369,7 @@ class TestRealWorldScenarios:
     @pytest.mark.asyncio
     async def test_collaborative_analysis_scenario(self, mock_context_with_team):
         """Test multiple analysts working on different aspects."""
-        with patch("main.app_context", mock_context_with_team):
+        with patch("src.main.app_context", mock_context_with_team):
             # Analyst 1: Security review
             security_1 = await reflectivethinking(
                 thought="Security Analyst: Review authentication implementation",

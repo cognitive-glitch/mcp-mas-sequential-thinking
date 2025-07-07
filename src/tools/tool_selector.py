@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from src.models.thought_models import (
+from models.thought_models import (
     ThoughtData,
     ToolRecommendation,
     StepRecommendation,
