@@ -1553,16 +1553,10 @@ async def lifespan(app):
     app_context.cleanup()
 
 
+def run():
+    mcp.run("stdio")
+
+
 # Main execution
 if __name__ == "__main__":
-    # Configure server
-    server_config = {
-        "host": "0.0.0.0",
-        "port": 8000,
-        "log_level": "info",
-    }
-
-    logger.info(f"Starting server with configuration: {server_config}")
-
-    # Run the server
-    mcp.run()
+    run()

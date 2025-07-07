@@ -25,7 +25,7 @@ dev = ["pytest", "black", "isort", "mypy", "pyright", "ruff"]
 
 [project.scripts]
 mcp-mas-sequential-thinking = "main:run"
-reflective-sequential-thinking-mcp = "main_refactored:run"
+reflective-sequential-thinking-mcp = "main:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -35,7 +35,4 @@ build-backend = "hatchling.build"
 include = ["main.py"]
 
 [dependency-groups]
-dev = [
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.0.0",
-]
+dev = ["pytest>=8.4.1", "pytest-asyncio>=1.0.0"]
