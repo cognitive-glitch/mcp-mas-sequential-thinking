@@ -103,7 +103,7 @@ class LLMProviderFactory:
         Gets the provider configuration for the specified provider.
 
         Args:
-            provider_name: Name of the provider. If None, uses LLM_PROVIDER env var.
+            provider_name: Name of the provider. If None, uses REFLECTIVE_LLM_PROVIDER env var.
                          Defaults to 'openai' if not set.
 
         Returns:
@@ -113,7 +113,9 @@ class LLMProviderFactory:
             ValueError: If provider is not supported
         """
         if provider_name is None:
-            provider_name = os.environ.get("LLM_PROVIDER", "openai").lower()
+            provider_name = os.environ.get("REFLECTIVE_LLM_PROVIDER", "openai").lower()
+        else:
+            provider_name = provider_name.lower()
 
         if provider_name not in cls.PROVIDERS:
             available = ", ".join(cls.PROVIDERS.keys())

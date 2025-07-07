@@ -11,7 +11,7 @@ This is a Python project implementing a Multi-Agent System (MAS) for sequential 
 
 *   **Main Entry Point & Server Logic:** [`main.py`](mdc:main.py) - Sets up the FastMCP server, defines the `sequentialthinking` tool, instantiates the agents, and contains the primary coordination logic using the `Team` object from Agno.
 *   **Dependencies:** [`pyproject.toml`](mdc:pyproject.toml) and [`uv.lock`](mdc:uv.lock) define and lock project dependencies, managed preferably with `uv`.
-*   **Configuration:** Relies on environment variables (often stored in a `.env` file, see [`.gitignore`](mdc:.gitignore)) for API keys (Groq, DeepSeek, OpenRouter, Exa) and LLM model selection (`LLM_PROVIDER`, `*_MODEL_ID`, etc.).
+*   **Configuration:** Relies on environment variables (often stored in a `.env` file, see [`.gitignore`](mdc:.gitignore)) for API keys (Groq, DeepSeek, OpenRouter, Exa) and LLM model selection (`REFLECTIVE_LLM_PROVIDER`, `*_MODEL_ID`, etc.).
 
 ## Key Concepts & Libraries
 

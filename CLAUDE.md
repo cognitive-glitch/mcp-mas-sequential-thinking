@@ -258,7 +258,7 @@ async def log_thought_processing(thought_data: ThoughtData) -> None:
 
 ```bash
 # LLM Configuration (DEFAULT: OpenRouter)
-LLM_PROVIDER=openrouter  # DEFAULT. Alternatives: openai, gemini, groq
+REFLECTIVE_LLM_PROVIDER=openrouter  # DEFAULT. Alternatives: openai, gemini, groq
 OPENROUTER_API_KEY=your_key
 OPENROUTER_TEAM_MODEL_ID=openai/gpt-4-turbo
 OPENROUTER_REFLECTION_MODEL_ID=anthropic/claude-3-opus  # NEW
@@ -417,7 +417,7 @@ else:
 **Fix**: Add model validation in `get_model_config()`:
 ```python
 def get_model_config() -> tuple[Type[Model], str, str]:
-    provider = os.environ.get("THINKING_LLM_PROVIDER", "openrouter").lower()
+    provider = os.environ.get("REFLECTIVE_LLM_PROVIDER", "openrouter").lower()
     
     # Validate provider is supported
     if provider not in ["openrouter", "openai", "gemini", "groq"]:
@@ -479,11 +479,11 @@ This project includes comprehensive Claude Code hooks integration for automated 
 
 ### Available Hook Scripts
 
-| **Script** | **Purpose** | **Usage** |
-|------------|-------------|-----------|
-| `install-hooks.sh` | Install/update hooks configuration | `./.claude/install-hooks.sh [--force] [--test]` |
-| `test-hooks.sh` | Test hooks functionality | `./.claude/test-hooks.sh [--simulate] [--verbose]` |
-| `manage-hooks.sh` | Enable/disable/manage hooks | `./.claude/manage-hooks.sh [enable\|disable\|status]` |
+| **Script**         | **Purpose**                        | **Usage**                                             |
+| ------------------ | ---------------------------------- | ----------------------------------------------------- |
+| `install-hooks.sh` | Install/update hooks configuration | `./.claude/install-hooks.sh [--force] [--test]`       |
+| `test-hooks.sh`    | Test hooks functionality           | `./.claude/test-hooks.sh [--simulate] [--verbose]`    |
+| `manage-hooks.sh`  | Enable/disable/manage hooks        | `./.claude/manage-hooks.sh [enable\|disable\|status]` |
 
 ### Automated Workflows
 

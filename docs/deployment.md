@@ -37,7 +37,7 @@ pip install uv  # If not already installed
 uv pip install -e ".[dev]"
 
 # 3. Set environment variables
-export LLM_PROVIDER=openrouter
+export REFLECTIVE_LLM_PROVIDER=openrouter
 export OPENROUTER_API_KEY=your_api_key_here
 
 # 4. Test installation
@@ -73,19 +73,19 @@ Create a `.env` file in the project root:
 
 ```bash
 # LLM Provider Configuration
-LLM_PROVIDER=openrouter
+REFLECTIVE_LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_openrouter_key
 OPENROUTER_TEAM_MODEL_ID=openai/gpt-4-turbo
 OPENROUTER_AGENT_MODEL_ID=anthropic/claude-3-opus
 
 # Alternative: OpenAI
-# LLM_PROVIDER=openai
+# REFLECTIVE_LLM_PROVIDER=openai
 # OPENAI_API_KEY=your_openai_key
 # OPENAI_TEAM_MODEL_ID=gpt-4-turbo
 # OPENAI_AGENT_MODEL_ID=gpt-4-turbo
 
 # Alternative: Gemini
-# LLM_PROVIDER=gemini
+# REFLECTIVE_LLM_PROVIDER=gemini
 # GOOGLE_API_KEY=your_google_key
 # GEMINI_TEAM_MODEL_ID=gemini-2.0-flash
 # GEMINI_AGENT_MODEL_ID=gemini-2.5-pro-preview
@@ -192,7 +192,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - LLM_PROVIDER=${LLM_PROVIDER}
+      - REFLECTIVE_LLM_PROVIDER=${REFLECTIVE_LLM_PROVIDER}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - CONTEXT_BACKEND=redis
       - REDIS_URL=redis://redis:6379
@@ -279,7 +279,7 @@ uv pip install -e "."
 
 # Create environment file
 cat > .env << EOF
-LLM_PROVIDER=openrouter
+REFLECTIVE_LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_api_key
 CONTEXT_BACKEND=redis
 REDIS_URL=redis://localhost:6379
@@ -369,12 +369,12 @@ sudo systemctl restart nginx
 
 #### Core Configuration
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `LLM_PROVIDER` | Yes | `openrouter` | LLM provider (openrouter, openai, gemini) |
-| `CONTEXT_BACKEND` | No | `memory` | Context storage (memory, redis) |
-| `ENABLE_REFLECTION` | No | `true` | Enable reflection team |
-| `REFLECTION_DELAY_MS` | No | `500` | Delay before reflection team starts |
+| Variable                  | Required | Default      | Description                               |
+| ------------------------- | -------- | ------------ | ----------------------------------------- |
+| `REFLECTIVE_LLM_PROVIDER` | Yes      | `openrouter` | LLM provider (openrouter, openai, gemini) |
+| `CONTEXT_BACKEND`         | No       | `memory`     | Context storage (memory, redis)           |
+| `ENABLE_REFLECTION`       | No       | `true`       | Enable reflection team                    |
+| `REFLECTION_DELAY_MS`     | No       | `500`        | Delay before reflection team starts       |
 
 #### Provider-Specific
 
@@ -472,7 +472,7 @@ SECURE_CONTEXT_ISOLATION=true
       ],
       "environment": [
         {
-          "name": "LLM_PROVIDER",
+          "name": "REFLECTIVE_LLM_PROVIDER",
           "value": "openrouter"
         }
       ],
@@ -557,7 +557,7 @@ spec:
         ports:
         - containerPort: 8000
         env:
-        - name: LLM_PROVIDER
+        - name: REFLECTIVE_LLM_PROVIDER
           value: "openrouter"
         - name: OPENROUTER_API_KEY
           valueFrom:
@@ -601,7 +601,7 @@ properties:
       - port: 8000
         protocol: TCP
       environmentVariables:
-      - name: LLM_PROVIDER
+      - name: REFLECTIVE_LLM_PROVIDER
         value: openrouter
       - name: OPENROUTER_API_KEY
         secureValue: your_secret_key

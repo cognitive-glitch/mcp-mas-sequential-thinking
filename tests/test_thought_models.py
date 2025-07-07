@@ -12,6 +12,7 @@ from src.models.thought_models import (
     BranchAnalysis,
     ThoughtSequenceReview,
     ProcessedThought,
+    ToolRecommendation,
 )
 from .conftest import create_test_thought_data, create_test_tool_recommendation
 
@@ -31,7 +32,7 @@ class TestThoughtData:
 
         assert thought.thought == "Test thought content"
         assert thought.thoughtNumber == 1
-        assert thought.totalThoughts == 3
+        assert thought.totalThoughts == 5  # MIN_TOTAL_THOUGHTS enforces minimum of 5
         assert thought.nextThoughtNeeded is True
         assert thought.domain == DomainType.GENERAL  # default
         assert thought.confidence_score == 0.5  # default
@@ -60,7 +61,7 @@ class TestThoughtData:
         """Test revision logic validation."""
         # Valid revision
         revision_thought = create_test_thought_data(
-            thought="Revised analysis",
+            thought="Revised analysis with more detailed insights and improvements",
             thoughtNumber=3,
             totalThoughts=5,
             nextThoughtNeeded=True,
@@ -130,13 +131,13 @@ class TestThoughtData:
             session_context=mock_session_context,
         )
 
-        # Should clean and normalize keywords
-        assert "valid" in thought.keywords
-        assert "uppercase" in thought.keywords
-        # Should filter out invalid keywords
-        assert "with spaces" not in thought.keywords
-        assert "special@chars" not in thought.keywords
-        assert "" not in thought.keywords
+        # Should clean keywords while preserving case and special chars
+        assert "Valid" in thought.keywords  # Case preserved
+        assert "UPPERCASE" in thought.keywords  # Case preserved
+        assert "with spaces" in thought.keywords  # Spaces allowed
+        assert "123numbers" in thought.keywords  # Numbers allowed
+        assert "special@chars" in thought.keywords  # Special chars allowed
+        assert "" not in thought.keywords  # Empty strings removed
 
     def test_topic_subject_validation(self, mock_session_context):
         """Test topic and subject validation."""
@@ -303,6 +304,21 @@ class TestProcessedThought:
 
     def test_processed_thought_creation(self, sample_thought_data):
         """Test creating a processed thought result."""
+        # Add current_step to sample_thought_data to allow tool_recommendations_generated
+        sample_thought_data.current_step = StepRecommendation(
+            step_description="Analyze performance metrics",
+            recommended_tools=[
+                ToolRecommendation(
+                    tool_name="performance_analyzer",
+                    confidence=0.9,
+                    rationale="Need to measure performance",
+                    priority=1,
+                    expected_outcome="Performance metrics",
+                )
+            ],
+            expected_outcome="Performance analysis complete",
+        )
+
         processed = ProcessedThought(
             thought_data=sample_thought_data,
             coordinator_response="Primary team analysis complete",

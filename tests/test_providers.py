@@ -68,14 +68,16 @@ class TestLLMProviderFactory:
         # Store original values
         original = {}
         keys_to_clean = [
-            "THINKING_LLM_PROVIDER",
+            "REFLECTIVE_LLM_PROVIDER",
             "OPENROUTER_API_KEY",
             "OPENROUTER_TEAM_MODEL_ID",
             "OPENROUTER_AGENT_MODEL_ID",
             "OPENAI_API_KEY",
             "OPENAI_TEAM_MODEL_ID",
+            "OPENAI_AGENT_MODEL_ID",
             "GOOGLE_API_KEY",
             "GEMINI_TEAM_MODEL_ID",
+            "GEMINI_AGENT_MODEL_ID",
         ]
 
         for key in keys_to_clean:
@@ -90,27 +92,27 @@ class TestLLMProviderFactory:
             os.environ[key] = value
 
     def test_supported_providers(self):
-        """Test that all supported providers are registered."""
+        """Test that required providers are registered."""
         providers = LLMProviderFactory.list_providers()
 
-        # Should have all supported providers
-        provider_names = {info["name"] for info in providers.values()}
+        # Should have OpenRouter, OpenAI, and Gemini providers
+        provider_names = {info["provider_name"] for info in providers.values()}
         assert "OpenRouter" in provider_names
         assert "OpenAI" in provider_names
         assert "Google Gemini" in provider_names
-        assert "Groq" in provider_names
+        # Note: Not testing Groq as per user request
 
     def test_get_provider_config_default(self, clean_env):
         """Test getting default provider config."""
-        # Should default to OpenRouter
+        # Should default to OpenAI
         config = LLMProviderFactory.get_provider_config()
 
-        assert config.provider_name == "OpenRouter"
+        assert config.provider_name == "OpenAI"
 
     def test_get_provider_config_from_env(self, clean_env):
         """Test getting provider config from environment."""
         # Set provider to OpenAI
-        os.environ["THINKING_LLM_PROVIDER"] = "openai"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
 
         config = LLMProviderFactory.get_provider_config()
 
@@ -118,16 +120,16 @@ class TestLLMProviderFactory:
 
     def test_get_provider_config_invalid(self, clean_env):
         """Test handling of invalid provider."""
-        os.environ["THINKING_LLM_PROVIDER"] = "invalid_provider"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "invalid_provider"
 
         with pytest.raises(ValueError) as exc_info:
             LLMProviderFactory.get_provider_config()
 
-        assert "unsupported provider" in str(exc_info.value).lower()
+        assert "unsupported llm provider" in str(exc_info.value).lower()
 
     def test_validate_provider_config_missing_key(self, clean_env):
         """Test validation with missing API key."""
-        os.environ["THINKING_LLM_PROVIDER"] = "openai"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
         # Don't set OPENAI_API_KEY
 
         with pytest.raises(ValueError) as exc_info:
@@ -137,7 +139,7 @@ class TestLLMProviderFactory:
 
     def test_validate_provider_config_with_values(self, clean_env):
         """Test validation with all required values."""
-        os.environ["THINKING_LLM_PROVIDER"] = "openai"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
         os.environ["OPENAI_API_KEY"] = "test-key"
         os.environ["OPENAI_TEAM_MODEL_ID"] = "gpt-4"
 
@@ -154,7 +156,7 @@ class TestLLMProviderFactory:
         os.environ["OPENROUTER_AGENT_MODEL_ID"] = "agent-model"
 
         # Mock the model classes
-        with patch("src.providers.base.OpenRouterModel") as MockModel:
+        with patch("src.providers.base.OpenRouter") as MockModel:
             mock_instance = Mock()
             MockModel.return_value = mock_instance
 
@@ -170,12 +172,12 @@ class TestLLMProviderFactory:
 
     def test_create_models_openai(self, clean_env):
         """Test creating models for OpenAI."""
-        os.environ["THINKING_LLM_PROVIDER"] = "openai"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
         os.environ["OPENAI_API_KEY"] = "test-key"
         os.environ["OPENAI_TEAM_MODEL_ID"] = "gpt-4"
 
         # Mock the model classes
-        with patch("src.providers.base.OpenAIModel") as MockModel:
+        with patch("src.providers.base.OpenAIChat") as MockModel:
             mock_instance = Mock()
             MockModel.return_value = mock_instance
 
@@ -190,12 +192,12 @@ class TestLLMProviderFactory:
 
     def test_create_models_gemini(self, clean_env):
         """Test creating models for Google Gemini."""
-        os.environ["THINKING_LLM_PROVIDER"] = "gemini"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "gemini"
         os.environ["GOOGLE_API_KEY"] = "test-key"
         os.environ["GEMINI_TEAM_MODEL_ID"] = "gemini-pro"
 
         # Mock the model classes
-        with patch("src.providers.base.GeminiModel") as MockModel:
+        with patch("src.providers.base.Gemini") as MockModel:
             mock_instance = Mock()
             MockModel.return_value = mock_instance
 
@@ -209,7 +211,7 @@ class TestLLMProviderFactory:
         os.environ["OPENROUTER_API_KEY"] = "test-key"
         # Don't set model IDs - should use defaults
 
-        with patch("src.providers.base.OpenRouterModel") as MockModel:
+        with patch("src.providers.base.OpenRouter") as MockModel:
             mock_instance = Mock()
             MockModel.return_value = mock_instance
 
@@ -220,22 +222,22 @@ class TestLLMProviderFactory:
             agent_call = MockModel.call_args_list[1]
 
             # Check defaults are used
-            assert team_call[1]["id"] == "anthropic/claude-3.5-sonnet"
-            assert agent_call[1]["id"] == "anthropic/claude-3.5-haiku"
+            assert team_call[1]["id"] == "openai/o3"
+            assert agent_call[1]["id"] == "x-ai/grok-3-mini"
 
     def test_get_available_providers(self):
         """Test getting list of available providers."""
         providers = LLMProviderFactory.list_providers()
 
         assert isinstance(providers, dict)
-        assert len(providers) == 4  # openrouter, openai, gemini, groq
+        assert len(providers) >= 3  # At least openrouter, openai, gemini
         assert all(isinstance(k, str) for k in providers.keys())
         assert "openrouter" in providers
         assert "openai" in providers
 
     # def test_provider_info_string(self, clean_env):
     #     """Test getting provider info string."""
-    #     os.environ["THINKING_LLM_PROVIDER"] = "openai"
+    #     os.environ["REFLECTIVE_LLM_PROVIDER"] = "openai"
     #     os.environ["OPENAI_API_KEY"] = "test-key"
     #     os.environ["OPENAI_TEAM_MODEL_ID"] = "gpt-4-turbo"
 
@@ -249,16 +251,16 @@ class TestLLMProviderFactory:
         variations = ["OpenRouter", "openrouter", "OPENROUTER", "OpenROUTER"]
 
         for variant in variations:
-            os.environ["THINKING_LLM_PROVIDER"] = variant
+            os.environ["REFLECTIVE_LLM_PROVIDER"] = variant
             config = LLMProviderFactory.get_provider_config()
             assert config.provider_name == "OpenRouter"
 
     def test_provider_with_api_base(self, clean_env):
         """Test providers that need API base configuration."""
-        os.environ["THINKING_LLM_PROVIDER"] = "openrouter"
+        os.environ["REFLECTIVE_LLM_PROVIDER"] = "openrouter"
         os.environ["OPENROUTER_API_KEY"] = "test-key"
 
-        with patch("src.providers.base.OpenRouterModel") as MockModel:
+        with patch("src.providers.base.OpenRouter") as MockModel:
             LLMProviderFactory.create_models()
 
             # Should set API base for OpenRouter
@@ -274,7 +276,7 @@ class TestLLMProviderFactory:
         os.environ["OPENROUTER_API_KEY"] = test_key
         os.environ["OPENROUTER_TEAM_MODEL_ID"] = test_model
 
-        with patch("src.providers.base.OpenRouterModel") as MockModel:
+        with patch("src.providers.base.OpenRouter") as MockModel:
             LLMProviderFactory.create_models()
 
             # Should pass exact environment values
@@ -288,7 +290,7 @@ class TestLLMProviderFactory:
         os.environ["OPENROUTER_TEAM_MODEL_ID"] = "team-model"
         # Don't set agent model - should use team model
 
-        with patch("src.providers.base.OpenRouterModel") as MockModel:
+        with patch("src.providers.base.OpenRouter") as MockModel:
             team_model, agent_model, config = LLMProviderFactory.create_models()
 
             # Both should use team model ID

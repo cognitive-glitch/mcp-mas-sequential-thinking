@@ -33,7 +33,7 @@ cd reflective-sequential-thinking-mcp
 uv pip install -e ".[dev]"
 
 # Set up environment variables
-export LLM_PROVIDER=openrouter  # or openai, gemini
+export REFLECTIVE_LLM_PROVIDER=openrouter  # or openai, gemini
 export OPENROUTER_API_KEY=your_api_key_here
 ```
 

@@ -24,17 +24,17 @@ The goal is to achieve a higher quality of analysis and a more nuanced thinking 
 
 This Python/Agno implementation marks a fundamental shift from the original TypeScript version:
 
-| Feature/Aspect      | Python/Agno Version (Current)                                        | TypeScript Version (Original)                        |
-| :------------------ | :------------------------------------------------------------------- | :--------------------------------------------------- |
-| **Architecture**    | **Multi-Agent System (MAS)**; Active processing by a team of agents. | **Single Class State Tracker**; Simple logging/storing. |
-| **Intelligence**    | **Distributed Agent Logic**; Embedded in specialized agents & Coordinator. | **External LLM Only**; No internal intelligence.     |
-| **Processing**      | **Active Analysis & Synthesis**; Agents *act* on the thought.      | **Passive Logging**; Merely recorded the thought.    |
-| **Frameworks**      | **Agno (MAS) + FastMCP (Server)**; Uses dedicated MAS library.     | **MCP SDK only**.                                    |
-| **Coordination**    | **Explicit Team Coordination Logic** (`Team` in `coordinate` mode).  | **None**; No coordination concept.                   |
-| **Validation**      | **Pydantic Schema Validation**; Robust data validation.            | **Basic Type Checks**; Less reliable.              |
-| **External Tools**  | **Integrated (Exa via Researcher)**; Can perform research tasks.   | **None**.                                            |
-| **Logging**         | **Structured Python Logging (File + Console)**; Configurable.      | **Console Logging with Chalk**; Basic.             |
-| **Language & Ecosystem** | **Python**; Leverages Python AI/ML ecosystem.                    | **TypeScript/Node.js**.                              |
+| Feature/Aspect           | Python/Agno Version (Current)                                              | TypeScript Version (Original)                           |
+| :----------------------- | :------------------------------------------------------------------------- | :------------------------------------------------------ |
+| **Architecture**         | **Multi-Agent System (MAS)**; Active processing by a team of agents.       | **Single Class State Tracker**; Simple logging/storing. |
+| **Intelligence**         | **Distributed Agent Logic**; Embedded in specialized agents & Coordinator. | **External LLM Only**; No internal intelligence.        |
+| **Processing**           | **Active Analysis & Synthesis**; Agents *act* on the thought.              | **Passive Logging**; Merely recorded the thought.       |
+| **Frameworks**           | **Agno (MAS) + FastMCP (Server)**; Uses dedicated MAS library.             | **MCP SDK only**.                                       |
+| **Coordination**         | **Explicit Team Coordination Logic** (`Team` in `coordinate` mode).        | **None**; No coordination concept.                      |
+| **Validation**           | **Pydantic Schema Validation**; Robust data validation.                    | **Basic Type Checks**; Less reliable.                   |
+| **External Tools**       | **Integrated (Exa via Researcher)**; Can perform research tasks.           | **None**.                                               |
+| **Logging**              | **Structured Python Logging (File + Console)**; Configurable.              | **Console Logging with Chalk**; Basic.                  |
+| **Language & Ecosystem** | **Python**; Leverages Python AI/ML ecosystem.                              | **TypeScript/Node.js**.                                 |
 
 In essence, the system evolved from a passive thought *recorder* to an active thought *processor* powered by a collaborative team of AI agents.
 
@@ -67,7 +67,7 @@ This parallel processing leads to substantially higher token usage (potentially 
     - **Groq:** Requires `GROQ_API_KEY`.
     - **DeepSeek:** Requires `DEEPSEEK_API_KEY`.
     - **OpenRouter:** Requires `OPENROUTER_API_KEY`.
-    - Configure the desired provider using the `LLM_PROVIDER` environment variable (defaults to `deepseek`).
+    - Configure the desired provider using the `REFLECTIVE_LLM_PROVIDER` environment variable (defaults to `deepseek`).
 - Exa API Key (required only if using the Researcher agent's capabilities)
     - Set via the `EXA_API_KEY` environment variable.
 - `uv` package manager (recommended) or `pip`.
@@ -76,7 +76,7 @@ This parallel processing leads to substantially higher token usage (potentially 
 
 This server runs as a standard executable script that communicates via stdio, as expected by MCP. The exact configuration method depends on your specific MCP client implementation. Consult your client's documentation for details on integrating external tool servers.
 
-The `env` section within your MCP client configuration should include the API key for your chosen `LLM_PROVIDER`.
+The `env` section within your MCP client configuration should include the API key for your chosen `REFLECTIVE_LLM_PROVIDER`.
 
 ```json
 {
@@ -87,10 +87,10 @@ The `env` section within your MCP client configuration should include the API ke
             "mcp-server-mas-sequential-thinking" // Or the path to your main script, e.g., "main.py"
          ],
          "env": {
-            "LLM_PROVIDER": "deepseek", // Or "groq", "openrouter"
-            // "GROQ_API_KEY": "your_groq_api_key", // Only if LLM_PROVIDER="groq"
+            "REFLECTIVE_LLM_PROVIDER": "deepseek", // Or "groq", "openrouter"
+            // "GROQ_API_KEY": "your_groq_api_key", // Only if REFLECTIVE_LLM_PROVIDER="groq"
             "DEEPSEEK_API_KEY": "your_deepseek_api_key", // Default provider
-            // "OPENROUTER_API_KEY": "your_openrouter_api_key", // Only if LLM_PROVIDER="openrouter"
+            // "OPENROUTER_API_KEY": "your_openrouter_api_key", // Only if REFLECTIVE_LLM_PROVIDER="openrouter"
             "DEEPSEEK_BASE_URL": "your_base_url_if_needed", // Optional: If using a custom endpoint for DeepSeek
             "EXA_API_KEY": "your_exa_api_key" // Only if using Exa
          }
@@ -121,7 +121,7 @@ npx -y @smithery/cli install @FradSer/mcp-server-mas-sequential-thinking --clien
     ```dotenv
     # --- LLM Configuration ---
     # Select the LLM provider: "deepseek" (default), "groq", or "openrouter"
-    LLM_PROVIDER="deepseek"
+    REFLECTIVE_LLM_PROVIDER="deepseek"
 
     # Provide the API key for the chosen provider:
     # GROQ_API_KEY="your_groq_api_key"

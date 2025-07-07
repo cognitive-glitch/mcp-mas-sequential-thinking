@@ -201,13 +201,13 @@ def event_loop():
 def setup_test_environment():
     """Set up test environment variables."""
     # Set test environment variables
-    os.environ["LLM_PROVIDER"] = "test"
+    os.environ["REFLECTIVE_LLM_PROVIDER"] = "test"
     os.environ["TEST_API_KEY"] = "test-key"
 
     yield
 
     # Clean up
-    test_vars = ["LLM_PROVIDER", "TEST_API_KEY"]
+    test_vars = ["REFLECTIVE_LLM_PROVIDER", "TEST_API_KEY"]
     for var in test_vars:
         if var in os.environ:
             del os.environ[var]

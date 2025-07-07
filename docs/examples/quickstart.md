@@ -26,15 +26,15 @@ Set your API key:
 
 ```bash
 # Option 1: OpenRouter (Recommended - access to multiple models)
-export LLM_PROVIDER=openrouter
+export REFLECTIVE_LLM_PROVIDER=openrouter
 export OPENROUTER_API_KEY=your_openrouter_key
 
 # Option 2: OpenAI
-export LLM_PROVIDER=openai  
+export REFLECTIVE_LLM_PROVIDER=openai  
 export OPENAI_API_KEY=your_openai_key
 
 # Option 3: Google Gemini
-export LLM_PROVIDER=gemini
+export REFLECTIVE_LLM_PROVIDER=gemini
 export GOOGLE_API_KEY=your_google_key
 ```
 

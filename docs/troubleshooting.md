@@ -86,7 +86,7 @@ pip install -e ".[dev]"
 
 ### Environment Variable Issues
 
-**Problem**: `LLM_PROVIDER` not recognized
+**Problem**: `REFLECTIVE_LLM_PROVIDER` not recognized
 ```
 ValueError: Unsupported provider: None
 ```
@@ -94,24 +94,24 @@ ValueError: Unsupported provider: None
 **Solution**: Set environment variables correctly
 ```bash
 # Check current variables
-echo $LLM_PROVIDER
+echo $REFLECTIVE_LLM_PROVIDER
 echo $OPENROUTER_API_KEY
 
 # Set for current session
-export LLM_PROVIDER=openrouter
+export REFLECTIVE_LLM_PROVIDER=openrouter
 export OPENROUTER_API_KEY=sk-or-v1-...
 
 # Set permanently (Linux/macOS)
-echo 'export LLM_PROVIDER=openrouter' >> ~/.bashrc
+echo 'export REFLECTIVE_LLM_PROVIDER=openrouter' >> ~/.bashrc
 echo 'export OPENROUTER_API_KEY=sk-or-v1-...' >> ~/.bashrc
 source ~/.bashrc
 
 # Windows PowerShell
-$env:LLM_PROVIDER="openrouter"
+$env:REFLECTIVE_LLM_PROVIDER="openrouter"
 $env:OPENROUTER_API_KEY="sk-or-v1-..."
 
 # Windows Command Prompt
-set LLM_PROVIDER=openrouter
+set REFLECTIVE_LLM_PROVIDER=openrouter
 set OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
@@ -375,7 +375,7 @@ async def api_call_with_backoff(func, max_retries=3):
 # OpenAI: Check usage at https://platform.openai.com/usage
 
 # Use different providers as fallback
-export LLM_PROVIDER=gemini  # Switch to Gemini if OpenRouter limited
+export REFLECTIVE_LLM_PROVIDER=gemini  # Switch to Gemini if OpenRouter limited
 ```
 
 ### Network Connectivity Issues
@@ -574,7 +574,7 @@ async def system_health_check():
     
     # Check environment variables
     checks['env_vars'] = {
-        'LLM_PROVIDER': os.getenv('LLM_PROVIDER'),
+        'REFLECTIVE_LLM_PROVIDER': os.getenv('REFLECTIVE_LLM_PROVIDER'),
         'API_KEY_SET': bool(os.getenv('OPENROUTER_API_KEY') or os.getenv('OPENAI_API_KEY'))
     }
     

@@ -37,21 +37,21 @@ async def sequentialthinking(
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `thought` | `str` | ✅ | The thought content to process |
-| `thoughtNumber` | `int` | ✅ | Current thought number (1-based) |
-| `totalThoughts` | `int` | ✅ | Total expected thoughts in sequence |
-| `nextThoughtNeeded` | `bool` | ✅ | Whether another thought follows |
-| `isRevision` | `bool` | ❌ | Whether this revises a previous thought |
-| `revisesThought` | `int` | ❌ | Thought number being revised |
-| `branchFromThought` | `int` | ❌ | Thought to branch from |
-| `branchId` | `str` | ❌ | Unique identifier for branch |
-| `topic` | `str` | ❌ | Main topic or subject matter |
-| `subject` | `str` | ❌ | Specific subject area |
-| `domain` | `str` | ❌ | Problem domain (technical, creative, etc.) |
-| `keywords` | `List[str]` | ❌ | Relevant keywords for context |
-| `timestamp_ms` | `int` | ❌ | Custom timestamp (defaults to current time) |
+| Parameter           | Type        | Required | Description                                 |
+| ------------------- | ----------- | -------- | ------------------------------------------- |
+| `thought`           | `str`       | ✅        | The thought content to process              |
+| `thoughtNumber`     | `int`       | ✅        | Current thought number (1-based)            |
+| `totalThoughts`     | `int`       | ✅        | Total expected thoughts in sequence         |
+| `nextThoughtNeeded` | `bool`      | ✅        | Whether another thought follows             |
+| `isRevision`        | `bool`      | ❌        | Whether this revises a previous thought     |
+| `revisesThought`    | `int`       | ❌        | Thought number being revised                |
+| `branchFromThought` | `int`       | ❌        | Thought to branch from                      |
+| `branchId`          | `str`       | ❌        | Unique identifier for branch                |
+| `topic`             | `str`       | ❌        | Main topic or subject matter                |
+| `subject`           | `str`       | ❌        | Specific subject area                       |
+| `domain`            | `str`       | ❌        | Problem domain (technical, creative, etc.)  |
+| `keywords`          | `List[str]` | ❌        | Relevant keywords for context               |
+| `timestamp_ms`      | `int`       | ❌        | Custom timestamp (defaults to current time) |
 
 #### Returns
 - **Type**: `str`
@@ -447,19 +447,19 @@ agent_response = await agent_model.arun(prompt)
 #### Environment Configuration
 ```bash
 # OpenRouter (default)
-LLM_PROVIDER=openrouter
+REFLECTIVE_LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_key
 OPENROUTER_TEAM_MODEL_ID=openai/gpt-4-turbo
 OPENROUTER_AGENT_MODEL_ID=anthropic/claude-3-opus
 
 # OpenAI
-LLM_PROVIDER=openai
+REFLECTIVE_LLM_PROVIDER=openai
 OPENAI_API_KEY=your_key  
 OPENAI_TEAM_MODEL_ID=gpt-4-turbo
 OPENAI_AGENT_MODEL_ID=gpt-4-turbo
 
 # Gemini
-LLM_PROVIDER=gemini
+REFLECTIVE_LLM_PROVIDER=gemini
 GOOGLE_API_KEY=your_key
 GEMINI_TEAM_MODEL_ID=gemini-2.0-flash
 GEMINI_AGENT_MODEL_ID=gemini-2.5-pro-preview
