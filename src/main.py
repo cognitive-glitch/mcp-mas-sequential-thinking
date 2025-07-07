@@ -363,16 +363,29 @@ class EnhancedAppContext:
         try:
             # Get model configurations
             team_model_id, agent_model_id = self.provider_config.get_models()
-            team_model = self.provider_config.create_model_instance(team_model_id)
-            agent_model = self.provider_config.create_model_instance(agent_model_id)
+            logger.info(
+                f"Using team model: {team_model_id}, agent model: {agent_model_id}"
+            )
+
+            try:
+                team_model = self.provider_config.create_model_instance(team_model_id)
+                agent_model = self.provider_config.create_model_instance(agent_model_id)
+                logger.info("Model instances created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create model instances: {e}")
+                raise
 
             # Create primary thinking team
+            logger.info("Creating primary thinking team...")
             self.primary_team = await self._create_primary_team(team_model, agent_model)
+            logger.info("Primary team created successfully")
 
             # Create reflection team
+            logger.info("Creating reflection team...")
             self.reflection_team = await self._create_reflection_team(
                 team_model, agent_model
             )
+            logger.info("Reflection team created successfully")
 
             self.teams_initialized = True
             logger.info("Both teams initialized successfully")

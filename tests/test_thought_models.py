@@ -314,6 +314,9 @@ class TestProcessedThought:
                     rationale="Need to measure performance",
                     priority=1,
                     expected_outcome="Performance metrics",
+                    suggested_inputs=None,
+                    risk_assessment=None,
+                    execution_time_estimate=None,
                 )
             ],
             expected_outcome="Performance analysis complete",

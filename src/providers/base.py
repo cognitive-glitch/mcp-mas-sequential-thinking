@@ -51,7 +51,13 @@ class ProviderConfig:
 
     def create_model_instance(self, model_id: str, **kwargs) -> Model:
         """Creates a model instance with the given ID."""
-        return self.model_class(id=model_id, **kwargs)
+        # Get API key from environment
+        api_key = os.environ.get(self.api_key_env)
+        if not api_key:
+            raise ValueError(f"Missing API key: {self.api_key_env}")
+
+        # Agno models accept api_key parameter
+        return self.model_class(id=model_id, api_key=api_key, **kwargs)  # type: ignore[call-arg]
 
 
 class LLMProviderFactory:
