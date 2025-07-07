@@ -8,7 +8,7 @@ import networkx as nx
 
 from src.context.shared_context import SharedContext, Insight
 from src.models.thought_models import ToolDecision
-from conftest import create_test_thought_data
+from .conftest import create_test_thought_data
 
 
 class TestSharedContext:
@@ -17,9 +17,9 @@ class TestSharedContext:
     @pytest.mark.asyncio
     async def test_context_initialization(self):
         """Test SharedContext initialization."""
-        context = SharedContext(backend="memory")
+        context = SharedContext()
 
-        assert context.backend == "memory"
+        assert isinstance(context.memory_store, dict)
         assert isinstance(context.thought_graph, nx.DiGraph)
         assert len(context.key_insights) == 0
         assert len(context.tool_usage_history) == 0
@@ -319,31 +319,31 @@ class TestSharedContext:
         assert isinstance(cycles, list)
 
     @pytest.mark.asyncio
-    async def test_context_export_import(self, sample_thought_data):
-        """Test context state export and import."""
-        context1 = SharedContext()
+    async def test_memory_management(self, sample_thought_data):
+        """Test memory management and cleanup."""
+        context = SharedContext(max_memory_items=5, max_insights=3)
 
-        # Add some data
-        await context1.update_from_thought(sample_thought_data)
-        await context1.add_insight("Test insight", 1, 0.8, "test")
-        await context1.record_performance("test_metric", 100.0)
+        # Add data beyond limits to test cleanup
+        for i in range(10):
+            await context.update_context(f"key_{i}", f"value_{i}")
+            await context.add_insight(f"Insight {i}", i, 0.8, "test")
 
-        # Export state
-        state = await context1.export_state()
-
-        assert "memory_store" in state
-        assert "insights" in state
-        assert "performance_metrics" in state
-        assert "graph_data" in state
-
-        # Create new context and import state
-        context2 = SharedContext()
-        await context2.import_state(state)
-
-        # Verify data was imported
-        assert context2.thought_graph.number_of_nodes() == 1
-        assert len(context2.key_insights) == 1
-        assert len(context2.performance_metrics) == 1
+        # Should have enforced limits
+        assert len(context.memory_store) <= 5
+        assert len(context.key_insights) <= 3
+        
+        # Test clear functionality
+        context.clear()
+        assert len(context.memory_store) == 0
+        assert len(context.key_insights) == 0
+        assert context.thought_graph.number_of_nodes() == 0
+        
+        # Test memory usage statistics
+        await context.update_from_thought(sample_thought_data)
+        stats = context.get_memory_usage()
+        assert "memory_store_items" in stats
+        assert "thought_nodes" in stats
+        assert stats["thought_nodes"] == 1
 
     @pytest.mark.asyncio
     async def test_tool_decision_tracking(self, mock_session_context):

@@ -12,7 +12,7 @@ from main_refactored import (
     generate_sequence_review,
 )
 from src.models.thought_models import ProcessedThought, DomainType
-from conftest import create_test_thought_data
+from .conftest import create_test_thought_data
 
 
 class TestEnhancedAppContext:
@@ -330,7 +330,7 @@ class TestTeamCoordination:
         start_time = asyncio.get_event_loop().time()
 
         with patch("main_refactored.app_context", mock_app_context):
-            # Process sequentially (current implementation)
+            # Process in sequence (current implementation)
             result = await process_thought_with_dual_teams(sample_thought_data)
 
         end_time = asyncio.get_event_loop().time()

@@ -114,7 +114,7 @@ def sample_thought_data(mock_session_context):
 @pytest.fixture
 def shared_context():
     """Provide a fresh SharedContext for testing."""
-    return SharedContext(backend="memory")
+    return SharedContext()
 
 
 @pytest.fixture

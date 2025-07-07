@@ -1,10 +1,11 @@
 """
-Shared context system for maintaining state across agents and thoughts.
+Simple in-memory context system for maintaining state during a single execution.
+No persistence, no session management - just clean, fast memory storage.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, Literal
-from datetime import datetime
+from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
 import logging
 from collections import defaultdict
 import networkx as nx
@@ -42,18 +43,15 @@ class Insight:
 
 class SharedContext:
     """
-    Thread-safe shared context for multi-agent coordination.
-
-    Maintains:
-    - Key-value memory store
-    - Tool usage history
-    - Thought relationships graph
-    - Key insights
-    - Performance metrics
+    Simple in-memory shared context for multi-agent coordination.
+    
+    Maintains state only for the current execution - no persistence, no sessions.
+    Memory is automatically cleaned up when the process ends.
     """
 
-    def __init__(self, backend: Literal["memory", "redis"] = "memory"):
-        self.backend = backend
+    def __init__(self, max_memory_items: int = 500, max_insights: int = 50):
+        self.max_memory_items = max_memory_items
+        self.max_insights = max_insights
         self._lock = asyncio.Lock()
 
         # In-memory storage
@@ -64,20 +62,23 @@ class SharedContext:
         self.performance_metrics: Dict[str, List[float]] = defaultdict(list)
 
         # Metadata
-        self.created_at = datetime.utcnow()
-        self.last_updated = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
+        self.last_updated = datetime.now(timezone.utc)
         self.access_count = 0
 
-        # Redis backend (future enhancement)
-        if backend == "redis":
-            logger.warning("Redis backend not yet implemented, using memory")
-            self.backend = "memory"
-
     async def update_context(self, key: str, value: Any) -> None:
-        """Thread-safe context update."""
+        """Thread-safe context update with memory limit enforcement."""
         async with self._lock:
             self.memory_store[key] = value
-            self.last_updated = datetime.utcnow()
+            self.last_updated = datetime.now(timezone.utc)
+            
+            # Simple memory limit enforcement (FIFO eviction)
+            if len(self.memory_store) > self.max_memory_items:
+                oldest_keys = list(self.memory_store.keys())[:-self.max_memory_items]
+                for old_key in oldest_keys:
+                    del self.memory_store[old_key]
+                logger.debug(f"Evicted {len(oldest_keys)} old memory entries")
+            
             logger.debug(f"Updated context key '{key}'")
 
     async def get_context(self, key: str, default: Any = None) -> Any:
@@ -94,7 +95,7 @@ class SharedContext:
                 thought_data.thoughtNumber,
                 thought=thought_data.thought,
                 confidence=thought_data.confidence_score,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             # Add relationships
@@ -120,24 +121,25 @@ class SharedContext:
                     strength=relation.strength,
                 )
 
-            # Store tool decisions
+            # Store tool decisions (keep only recent ones)
             self.tool_usage_history.extend(thought_data.tool_decisions)
+            if len(self.tool_usage_history) > 100:  # Keep last 100 tool decisions
+                self.tool_usage_history = self.tool_usage_history[-100:]
 
             # Update snapshot
             if thought_data.context_snapshot:
                 for k, v in thought_data.context_snapshot.items():
-                    self.memory_store[f"snapshot_{thought_data.thoughtNumber}_{k}"] = v
+                    snapshot_key = f"snapshot_{thought_data.thoughtNumber}_{k}"
+                    await self.update_context(snapshot_key, v)
 
-            self.last_updated = datetime.utcnow()
+            self.last_updated = datetime.now(timezone.utc)
 
     async def get_relevant_context(
         self, thought: str, max_items: int = 10
     ) -> Dict[str, Any]:
         """
         Retrieves context relevant to the given thought.
-
-        Uses simple keyword matching and recency for now.
-        Could be enhanced with embeddings/semantic search.
+        Uses simple keyword matching and recency.
         """
         async with self._lock:
             relevant = {
@@ -207,15 +209,26 @@ class SharedContext:
                 source_thought=source_thought,
                 confidence=confidence,
                 category=category,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             self.key_insights.append(insight)
+            
+            # Keep only recent insights
+            if len(self.key_insights) > self.max_insights:
+                self.key_insights = self.key_insights[-self.max_insights:]
+                logger.debug(f"Trimmed insights to {self.max_insights} entries")
+            
+            self.last_updated = datetime.now(timezone.utc)
             logger.info(f"Added insight: {content[:50]}...")
 
     async def record_performance(self, metric_name: str, value: float) -> None:
         """Records a performance metric."""
         async with self._lock:
             self.performance_metrics[metric_name].append(value)
+            
+            # Keep only recent metrics (last 100 per metric)
+            if len(self.performance_metrics[metric_name]) > 100:
+                self.performance_metrics[metric_name] = self.performance_metrics[metric_name][-100:]
 
     async def get_performance_summary(self) -> Dict[str, Dict[str, float]]:
         """Gets summary statistics for performance metrics."""
@@ -247,59 +260,24 @@ class SharedContext:
         async with self._lock:
             return list(nx.simple_cycles(self.thought_graph))
 
-    async def export_state(self) -> Dict[str, Any]:
-        """Exports the full context state."""
-        async with self._lock:
-            return {
-                "memory_store": self.memory_store,
-                "tool_usage_history": [
-                    decision.model_dump() for decision in self.tool_usage_history
-                ],
-                "thought_graph": nx.node_link_data(self.thought_graph),
-                "key_insights": [ins.to_dict() for ins in self.key_insights],
-                "performance_metrics": dict(self.performance_metrics),
-                "metadata": {
-                    "created_at": self.created_at.isoformat(),
-                    "last_updated": self.last_updated.isoformat(),
-                    "access_count": self.access_count,
-                },
-            }
+    def get_memory_usage(self) -> Dict[str, int]:
+        """Returns current memory usage statistics."""
+        return {
+            "memory_store_items": len(self.memory_store),
+            "tool_history_count": len(self.tool_usage_history),
+            "thought_nodes": self.thought_graph.number_of_nodes(),
+            "thought_edges": self.thought_graph.number_of_edges(),
+            "insights_count": len(self.key_insights),
+            "performance_metrics": sum(len(values) for values in self.performance_metrics.values()),
+        }
 
-    async def import_state(self, state: Dict[str, Any]) -> None:
-        """Imports a previously exported state."""
-        async with self._lock:
-            self.memory_store = state.get("memory_store", {})
-
-            # Reconstruct tool decisions
-            self.tool_usage_history = [
-                ToolDecision(**decision)
-                for decision in state.get("tool_usage_history", [])
-            ]
-
-            # Reconstruct graph
-            if "thought_graph" in state:
-                self.thought_graph = nx.node_link_graph(state["thought_graph"])
-
-            # Reconstruct insights
-            self.key_insights = [
-                Insight(
-                    content=ins["content"],
-                    source_thought=ins["source_thought"],
-                    confidence=ins["confidence"],
-                    category=ins["category"],
-                    timestamp=datetime.fromisoformat(ins["timestamp"]),
-                )
-                for ins in state.get("key_insights", [])
-            ]
-
-            self.performance_metrics = defaultdict(
-                list, state.get("performance_metrics", {})
-            )
-
-            metadata = state.get("metadata", {})
-            if "created_at" in metadata:
-                self.created_at = datetime.fromisoformat(metadata["created_at"])
-            if "access_count" in metadata:
-                self.access_count = metadata["access_count"]
-
-            self.last_updated = datetime.utcnow()
+    def clear(self) -> None:
+        """Clear all stored data (useful for cleanup)."""
+        self.memory_store.clear()
+        self.tool_usage_history.clear()
+        self.thought_graph.clear()
+        self.key_insights.clear()
+        self.performance_metrics.clear()
+        self.access_count = 0
+        self.last_updated = datetime.now(timezone.utc)
+        logger.info("Cleared all context data")

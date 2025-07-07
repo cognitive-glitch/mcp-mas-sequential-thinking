@@ -8,15 +8,19 @@ Key Features:
 - SharedContext for memory persistence across thoughts and branches
 - LLMProviderFactory supporting OpenRouter, OpenAI, Gemini (DeepSeek removed)
 - Zero-token API bug fixes and comprehensive error handling
-- sequentialreview tool for thought sequence analysis
+- reflectivereview tool for thought sequence analysis
 - Claude Code hooks integration ready
 """
 
 import time
 import uuid
+import asyncio
+import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime
+from enum import Enum
+from dataclasses import dataclass, field
 
 # Core frameworks
 from mcp.server.fastmcp import FastMCP
@@ -39,7 +43,6 @@ from src.models.thought_models import (
 from src.providers.base import LLMProviderFactory
 from src.context.shared_context import SharedContext
 
-import logging
 import logging.handlers
 from pathlib import Path
 
@@ -51,10 +54,10 @@ load_dotenv()
 def setup_logging() -> logging.Logger:
     """Enhanced logging setup with detailed format."""
     home_dir = Path.home()
-    log_dir = home_dir / ".sequential_thinking" / "logs"
+    log_dir = home_dir / ".reflective_thinking" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    logger = logging.getLogger("sequential_thinking_enhanced")
+    logger = logging.getLogger("reflective_thinking_enhanced")
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter(
@@ -65,7 +68,7 @@ def setup_logging() -> logging.Logger:
     # File handler with rotation
     try:
         file_handler = logging.handlers.RotatingFileHandler(
-            log_dir / "sequential_thinking.log",
+            log_dir / "reflective_thinking.log",
             maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
         )
@@ -87,6 +90,191 @@ def setup_logging() -> logging.Logger:
 logger = setup_logging()
 
 
+class ErrorType(Enum):
+    """Categorize different types of errors for appropriate handling."""
+    TEAM_INITIALIZATION = "team_initialization"
+    TEAM_PROCESSING = "team_processing"
+    MODEL_COMMUNICATION = "model_communication"
+    VALIDATION_ERROR = "validation_error"
+    CONTEXT_ERROR = "context_error"
+    TIMEOUT_ERROR = "timeout_error"
+    RESOURCE_ERROR = "resource_error"
+    UNKNOWN_ERROR = "unknown_error"
+
+
+class ErrorSeverity(Enum):
+    """Error severity levels for escalation."""
+    LOW = "low"           # Warnings, non-critical issues
+    MEDIUM = "medium"     # Degraded functionality but recoverable
+    HIGH = "high"         # Major functionality loss
+    CRITICAL = "critical" # System failure
+
+
+@dataclass
+class ErrorContext:
+    """Enhanced error context for debugging and recovery."""
+    error_type: ErrorType
+    severity: ErrorSeverity
+    message: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    thought_number: Optional[int] = None
+    session_id: Optional[str] = None
+    stack_trace: Optional[str] = None
+    recovery_attempted: bool = False
+    recovery_successful: bool = False
+    retry_count: int = 0
+    max_retries: int = 3
+
+
+class CircuitBreaker:
+    """Circuit breaker pattern for preventing cascade failures."""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "closed"  # closed, open, half-open
+    
+    def can_execute(self) -> bool:
+        """Check if operation can be executed."""
+        if self.state == "closed":
+            return True
+        elif self.state == "open":
+            if self.last_failure_time and time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = "half-open"
+                return True
+            return False
+        else:  # half-open
+            return True
+    
+    def record_success(self):
+        """Record successful operation."""
+        self.failure_count = 0
+        self.state = "closed"
+    
+    def record_failure(self):
+        """Record failed operation."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.failure_count >= self.failure_threshold:
+            self.state = "open"
+
+
+class EnhancedErrorHandler:
+    """Comprehensive error handling with recovery strategies."""
+    
+    def __init__(self):
+        self.error_history: List[ErrorContext] = []
+        self.circuit_breakers: Dict[str, CircuitBreaker] = {
+            "primary_team": CircuitBreaker(),
+            "reflection_team": CircuitBreaker(), 
+            "context_operations": CircuitBreaker(),
+        }
+    
+    async def handle_error(
+        self, 
+        error: Exception, 
+        error_type: ErrorType, 
+        context: Dict[str, Any],
+        recovery_strategy: Optional[Callable] = None
+    ) -> ErrorContext:
+        """Handle errors with appropriate recovery strategies."""
+        
+        # Determine severity based on error type and context
+        severity = self._determine_severity(error, error_type, context)
+        
+        # Create error context
+        error_context = ErrorContext(
+            error_type=error_type,
+            severity=severity,
+            message=str(error),
+            thought_number=context.get("thought_number"),
+            session_id=context.get("session_id"),
+            stack_trace=context.get("stack_trace"),
+        )
+        
+        # Log error with appropriate level
+        self._log_error(error_context)
+        
+        # Attempt recovery if strategy provided
+        if recovery_strategy and error_context.retry_count < error_context.max_retries:
+            try:
+                error_context.recovery_attempted = True
+                error_context.retry_count += 1
+                
+                # Add exponential backoff for retries
+                if error_context.retry_count > 1:
+                    await asyncio.sleep(min(2 ** error_context.retry_count, 30))
+                
+                await recovery_strategy()
+                error_context.recovery_successful = True
+                
+            except Exception as recovery_error:
+                logger.warning(f"Recovery attempt failed: {recovery_error}")
+        
+        # Store error for analysis
+        self.error_history.append(error_context)
+        
+        # Update circuit breaker
+        component = context.get("component")
+        if component in self.circuit_breakers:
+            if error_context.recovery_successful:
+                self.circuit_breakers[component].record_success()
+            else:
+                self.circuit_breakers[component].record_failure()
+        
+        return error_context
+    
+    def _determine_severity(
+        self, 
+        error: Exception, 
+        error_type: ErrorType, 
+        context: Dict[str, Any]
+    ) -> ErrorSeverity:
+        """Determine error severity based on type and context."""
+        
+        if error_type in [ErrorType.TEAM_INITIALIZATION, ErrorType.MODEL_COMMUNICATION]:
+            return ErrorSeverity.HIGH
+        elif error_type in [ErrorType.VALIDATION_ERROR, ErrorType.CONTEXT_ERROR]:
+            return ErrorSeverity.MEDIUM
+        elif error_type == ErrorType.TIMEOUT_ERROR:
+            return ErrorSeverity.MEDIUM if context.get("retry_count", 0) < 2 else ErrorSeverity.HIGH
+        else:
+            return ErrorSeverity.LOW
+    
+    def _log_error(self, error_context: ErrorContext):
+        """Log error with appropriate level."""
+        log_msg = f"[{error_context.error_type.value}] {error_context.message}"
+        
+        if error_context.thought_number:
+            log_msg += f" (Thought #{error_context.thought_number})"
+        
+        if error_context.severity == ErrorSeverity.CRITICAL:
+            logger.critical(log_msg)
+        elif error_context.severity == ErrorSeverity.HIGH:
+            logger.error(log_msg)
+        elif error_context.severity == ErrorSeverity.MEDIUM:
+            logger.warning(log_msg)
+        else:
+            logger.info(log_msg)
+    
+    def get_error_summary(self) -> Dict[str, Any]:
+        """Get summary of recent errors for monitoring."""
+        recent_errors = [e for e in self.error_history if 
+                        (datetime.now() - e.timestamp).seconds < 3600]  # Last hour
+        
+        return {
+            "total_errors": len(self.error_history),
+            "recent_errors": len(recent_errors),
+            "error_types": {et.value: len([e for e in recent_errors if e.error_type == et]) 
+                           for et in ErrorType},
+            "circuit_breaker_states": {name: cb.state for name, cb in self.circuit_breakers.items()},
+            "recovery_success_rate": sum(1 for e in recent_errors if e.recovery_successful) / max(len(recent_errors), 1)
+        }
+
+
 class EnhancedAppContext:
     """
     Enhanced application context with SharedContext integration and dual-team architecture.
@@ -94,7 +282,7 @@ class EnhancedAppContext:
 
     def __init__(self):
         self.session_id = str(uuid.uuid4())
-        self.shared_context = SharedContext()
+        self.shared_context = SharedContext()  # Simple in-memory context
         self.session_context = SessionContext(
             session_id=self.session_id,
             available_tools=[
@@ -119,9 +307,240 @@ class EnhancedAppContext:
         self.total_thoughts = 0
         self.total_reflections = 0
 
+        # Enhanced error handling
+        self.error_handler = EnhancedErrorHandler()
+
+        # Initialize context for adaptive prompts
+        self.current_thought_context = {
+            "domain": "general",
+            "complexity": 0.5,
+            "sequence_position": 1,
+            "has_tools": False,
+            "requires_research": False,
+            "revision_depth": 0,
+            "is_branching": False,
+            "topic_specified": False,
+        }
+
         logger.info(
             f"Enhanced app context initialized with session ID: {self.session_id}"
         )
+
+    def _update_thought_context(self, thought_data: ThoughtData) -> None:
+        """Update context for adaptive prompt generation."""
+        self.current_thought_context.update({
+            "domain": thought_data.domain.value,
+            "complexity": getattr(thought_data, 'content_complexity', 0.5),
+            "sequence_position": thought_data.thoughtNumber / thought_data.totalThoughts,
+            "has_tools": bool(thought_data.current_step and thought_data.current_step.recommended_tools),
+            "requires_research": any(kw in thought_data.thought.lower() for kw in ['research', 'find', 'search', 'investigate']),
+            "revision_depth": 1 if thought_data.isRevision else 0,
+            "is_branching": bool(thought_data.branchFromThought),
+            "topic_specified": bool(thought_data.topic or thought_data.subject),
+        })
+
+    def _generate_adaptive_coordinator_instructions(self) -> List[str]:
+        """Generate context-aware coordinator instructions."""
+        base_instructions = [
+            "🎯 **PRIMARY THINKING TEAM COORDINATOR**",
+            "You orchestrate a team of specialists to process reflective thoughts with precision and intelligence.",
+            "",
+            "**🧠 CORE RESPONSIBILITIES:**",
+            "1. **Context Intelligence**: Analyze thought complexity, domain, and sequence position",
+            "2. **Smart Delegation**: Route tasks to optimal specialists based on content analysis",
+            "3. **Quality Orchestration**: Ensure coherent, actionable outputs with tool recommendations",
+            "4. **Adaptive Processing**: Adjust approach based on thought type (revision, branch, continuation)",
+            "",
+            "**🔧 SPECIALIST DEPLOYMENT STRATEGY:**",
+        ]
+
+        # Add context-specific delegation guidance
+        context = self.current_thought_context
+        
+        if context["complexity"] > 0.7:
+            base_instructions.append("• **High Complexity Mode**: Engage Analyzer + Critic for thorough examination")
+        
+        if context["requires_research"]:
+            base_instructions.append("• **Research Required**: Prioritize Researcher with domain-specific methodology")
+        
+        if context["has_tools"]:
+            base_instructions.append("• **Tool Integration**: Engage Planner for tool validation and optimization")
+        
+        if context["revision_depth"] > 0:
+            base_instructions.append("• **Revision Mode**: Focus Critic on improvement identification and validation")
+        
+        if context["is_branching"]:
+            base_instructions.append("• **Branching Analysis**: Deploy Analyzer for alternative pathway exploration")
+
+        # Add domain-specific guidance
+        domain_guidance = {
+            "technical": "Focus on precision, implementation details, and technical feasibility",
+            "creative": "Emphasize ideation, alternative approaches, and innovative solutions", 
+            "analytical": "Prioritize data-driven insights, pattern recognition, and logical structures",
+            "strategic": "Focus on long-term implications, trade-offs, and decision frameworks",
+            "research": "Emphasize methodology, source validation, and comprehensive information gathering"
+        }
+        
+        if context["domain"] in domain_guidance:
+            base_instructions.extend([
+                "",
+                f"**🎯 DOMAIN OPTIMIZATION ({context['domain'].upper()}):**",
+                f"• {domain_guidance[context['domain']]}",
+            ])
+
+        # Add quality standards
+        base_instructions.extend([
+            "",
+            "**✅ QUALITY STANDARDS:**",
+            "• Every response must be actionable and well-reasoned",
+            "• Tool recommendations require clear rationale and confidence scores",
+            "• Maintain alignment with stated topic/subject throughout",
+            "• Provide specific, constructive guidance for next steps",
+            "",
+            "**⚡ OUTPUT REQUIREMENTS:**",
+            "• Synthesize specialist insights into coherent, unified response",
+            "• Include confidence indicators and quality assessments",
+            "• Suggest improvements or alternative approaches when applicable",
+            "• Ensure response supports the overall thinking sequence goals",
+        ])
+
+        return base_instructions
+
+    def _generate_planner_instructions(self) -> List[str]:
+        """Generate context-aware planner instructions."""
+        context = self.current_thought_context
+        
+        base_instructions = [
+            "🎯 **STRATEGIC PLANNER & TOOL ORCHESTRATOR**",
+            "You are the planning specialist focused on strategic thinking and intelligent tool selection.",
+            "",
+            "**⚡ CORE CAPABILITIES:**",
+            "• Strategic plan development with clear execution paths",
+            "• Intelligent tool recommendation with confidence scoring",
+            "• Risk assessment and contingency planning",
+            "• Resource optimization and efficiency analysis",
+            "",
+        ]
+
+        # Add context-specific planning guidance
+        if context["complexity"] > 0.7:
+            base_instructions.extend([
+                "**🧩 HIGH COMPLEXITY MODE ACTIVE:**",
+                "• Break down complex problems into manageable sub-problems",
+                "• Provide multiple execution pathways with risk assessments",
+                "• Include detailed contingency plans for each major step",
+                "",
+            ])
+
+        if context["requires_research"]:
+            base_instructions.extend([
+                "**🔍 RESEARCH-INTENSIVE PLANNING:**",
+                "• Prioritize information gathering tools and methodologies",
+                "• Plan iterative research cycles with validation checkpoints",
+                "• Include source verification and cross-validation steps",
+                "",
+            ])
+
+        # Add domain-specific planning approaches
+        domain_approaches = {
+            "technical": [
+                "• Emphasize feasibility analysis and implementation constraints",
+                "• Include testing and validation phases in all plans",
+                "• Consider scalability and performance implications"
+            ],
+            "creative": [
+                "• Allow for exploration phases and iterative refinement",
+                "• Include brainstorming and ideation checkpoints",
+                "• Plan for multiple concept evaluation cycles"
+            ],
+            "analytical": [
+                "• Structure plans around data collection and analysis phases",
+                "• Include statistical validation and hypothesis testing",
+                "• Plan for systematic evidence gathering"
+            ]
+        }
+
+        if context["domain"] in domain_approaches:
+            base_instructions.extend([
+                f"**🎯 {context['domain'].upper()} DOMAIN OPTIMIZATION:**"
+            ] + domain_approaches[context["domain"]] + [""])
+
+        # Add standard operating procedures
+        base_instructions.extend([
+            "**📋 PLANNING PROTOCOL:**",
+            "1. **Context Analysis**: Extract domain, complexity, and objectives",
+            "2. **Tool Assessment**: Evaluate available tools for task alignment", 
+            "3. **Strategy Formation**: Create multi-step execution plan",
+            "4. **Risk Evaluation**: Identify potential failure points and alternatives",
+            "5. **Resource Planning**: Optimize for efficiency and effectiveness",
+            "6. **Quality Gates**: Define success criteria and validation methods",
+            "",
+            "**🔧 TOOL RECOMMENDATION FORMAT:**",
+            "• Tool Name: [specific tool identifier]",
+            "• Confidence: [0.0-1.0 with justification]",
+            "• Rationale: [clear reasoning for selection]",
+            "• Priority: [execution order with dependencies]",
+            "• Expected Outcome: [specific, measurable result]",
+            "• Alternatives: [backup options if primary fails]",
+            "• Risk Level: [assessment of potential issues]",
+            "",
+            "**✅ SUCCESS CRITERIA:**",
+            "• Plans must be actionable and specific",
+            "• Tool recommendations must include clear justification",
+            "• All major risks and contingencies must be addressed",
+            "• Resource requirements must be realistic and achievable",
+        ])
+
+        return base_instructions
+
+    def _generate_researcher_instructions(self) -> List[str]:
+        """Generate context-aware researcher instructions."""
+        context = self.current_thought_context
+        
+        instructions = [
+            "🔍 **DOMAIN-AWARE INFORMATION GATHERER**",
+            "You specialize in intelligent information gathering with domain expertise.",
+            "",
+            "**🎯 RESEARCH EXCELLENCE:**",
+            "• Domain-specific search strategies and methodologies",
+            "• Source validation and credibility assessment",
+            "• Information synthesis and gap identification",
+            "• Context-aware relevance filtering",
+            "",
+        ]
+
+        # Add domain-specific research approaches
+        domain_methods = {
+            "technical": "Focus on technical specifications, implementation guides, and peer-reviewed sources",
+            "creative": "Emphasize case studies, creative examples, and innovative approaches",
+            "analytical": "Prioritize data sources, statistical studies, and empirical evidence",
+            "strategic": "Focus on market analysis, competitive intelligence, and strategic frameworks"
+        }
+
+        if context["domain"] in domain_methods:
+            instructions.extend([
+                f"**🎯 {context['domain'].upper()} RESEARCH METHODOLOGY:**",
+                f"• {domain_methods[context['domain']]}",
+                "",
+            ])
+
+        instructions.extend([
+            "**📚 RESEARCH PROTOCOL:**",
+            "1. **Query Analysis**: Understand information requirements and context",
+            "2. **Source Strategy**: Select appropriate information sources and methods",
+            "3. **Data Collection**: Gather relevant, credible information",
+            "4. **Validation**: Cross-check sources and verify accuracy",
+            "5. **Synthesis**: Organize findings into actionable insights",
+            "6. **Gap Analysis**: Identify missing information or follow-up needs",
+            "",
+            "**✅ QUALITY STANDARDS:**",
+            "• All sources must be credible and relevant",
+            "• Information must directly address the stated requirements",
+            "• Findings must be organized and easily actionable",
+            "• Gaps and limitations must be clearly identified",
+        ])
+
+        return instructions
 
     async def initialize_models(self) -> None:
         """Initialize LLM models using the enhanced provider factory."""
@@ -158,22 +577,7 @@ class EnhancedAppContext:
             role="Strategic Planner & Tool Orchestrator",
             description="Develops strategic plans and recommends appropriate tools for each step.",
             tools=[ThinkingTools()],
-            instructions=[
-                "You are the Strategic Planner and Tool Orchestrator specialist.",
-                "When you receive a sub-task from the Team Coordinator:",
-                "1. Understand the specific planning requirement and topic/subject context.",
-                "2. Analyze the available tools and recommend the most appropriate ones.",
-                "3. Create step-by-step plans with tool recommendations including:",
-                "   - Tool name and confidence level (0-1)",
-                "   - Rationale for each tool choice",
-                "   - Priority order for tool execution",
-                "   - Expected outcomes from each tool",
-                "   - Alternative tools if primary choice fails",
-                "4. Consider the problem domain (technical, creative, analytical, etc.).",
-                "5. Identify potential revision/branching points in your plan.",
-                "6. Return a structured response with clear tool recommendations.",
-                "Focus on practical, executable plans with intelligent tool selection.",
-            ],
+            instructions=self._generate_planner_instructions(),
             model=self.agent_model,
             add_datetime_to_instructions=True,
             markdown=True,
@@ -185,18 +589,7 @@ class EnhancedAppContext:
             role="Domain-Aware Information Gatherer",
             description="Gathers information with awareness of topic/subject context.",
             tools=[ThinkingTools(), ExaTools()],
-            instructions=[
-                "You are the Domain-Aware Information Gatherer specialist.",
-                "When you receive a research sub-task:",
-                "1. Analyze the topic, subject, and domain context provided.",
-                "2. Tailor your search strategy to the specific domain (technical, creative, etc.).",
-                "3. Use appropriate keywords and search terms based on the context.",
-                "4. Validate information relevance to the stated topic/subject.",
-                "5. Structure findings with domain-specific considerations.",
-                "6. Note any domain-specific information gaps or limitations.",
-                "7. Provide recommendations for follow-up research if needed.",
-                "Focus on domain-appropriate research methodologies and validation.",
-            ],
+            instructions=self._generate_researcher_instructions(),
             model=self.agent_model,
             add_datetime_to_instructions=True,
             markdown=True,
@@ -274,30 +667,7 @@ class EnhancedAppContext:
         # Create team with enhanced coordinator instructions
         team = Team(
             members=[planner, researcher, analyzer, critic, synthesizer],
-            instructions=[
-                "You are the Primary Thinking Team Coordinator for reflective sequential thinking.",
-                "Your role is to process thoughts with tool recommendations and topic alignment.",
-                "",
-                "When you receive a thought to process:",
-                "1. **Context Analysis**: Extract topic, subject, domain, and keywords from the thought.",
-                "2. **Task Delegation**: Delegate appropriate sub-tasks to your specialists:",
-                "   - **Planner**: For strategic planning and tool recommendation",
-                "   - **Researcher**: For information gathering with domain awareness",
-                "   - **Analyzer**: For pattern recognition and deep analysis",
-                "   - **Critic**: For quality control and bias detection",
-                "   - **Synthesizer**: For integration and coherent response generation",
-                "3. **Tool Orchestration**: Ensure tool recommendations are practical and justified.",
-                "4. **Quality Assurance**: Verify alignment with stated topic/subject.",
-                "5. **Response Integration**: Synthesize specialist inputs into a coherent response.",
-                "",
-                "Always consider:",
-                "- The thought's position in the sequence (revision, branch, continuation)",
-                "- Topic/subject alignment throughout the process",
-                "- Tool recommendation quality and justification",
-                "- Opportunities for improvement or alternative approaches",
-                "",
-                "Provide responses that are actionable, well-reasoned, and aligned with the thinking sequence goals.",
-            ],
+            instructions=self._generate_adaptive_coordinator_instructions(),
             model=self.team_model,
             mode="coordinate",
             add_datetime_to_instructions=True,
@@ -476,6 +846,57 @@ class EnhancedAppContext:
             logger.error(f"Error recording performance metric: {e}")
 
 
+async def _process_with_minimal_teams(
+    thought_data: ThoughtData, start_time: float, error_msg: str
+) -> ProcessedThought:
+    """
+    Graceful degradation processing when main teams fail.
+    Provides minimal but functional response.
+    """
+    execution_time = int((time.time() - start_time) * 1000)
+    
+    # Generate minimal but helpful response
+    minimal_response = f"""## Minimal Processing Mode
+
+**Thought Analysis**: {thought_data.thought}
+
+**Basic Assessment**:
+- Content received and acknowledged
+- Topic: {thought_data.topic or "Not specified"}
+- Domain: {thought_data.domain.value}
+- Sequence Position: {thought_data.thoughtNumber}/{thought_data.totalThoughts}
+
+**Error Context**: 
+Processing teams encountered issues: {error_msg}
+
+**Fallback Analysis**:
+While full team analysis is unavailable, the thought content appears to be {'complex' if len(thought_data.thought) > 200 else 'straightforward'} and {'well-structured' if '?' in thought_data.thought or any(word in thought_data.thought.lower() for word in ['analyze', 'consider', 'evaluate']) else 'direct'}.
+
+**Recommendations**:
+- Consider breaking down complex thoughts into smaller components
+- Retry processing after a brief pause
+- Ensure network connectivity for team operations
+- Review system status and error logs
+
+**Next Steps**: {'Continue sequence with simplified approach' if thought_data.nextThoughtNeeded else 'Complete sequence review recommended'}
+"""
+
+    return ProcessedThought(
+        thought_data=thought_data,
+        coordinator_response=minimal_response,
+        reflection_response=None,
+        integrated_response=minimal_response,
+        next_step_guidance="System is operating in degraded mode. Consider retrying or simplifying requests.",
+        execution_time_ms=execution_time,
+        token_usage={"minimal_processing": len(minimal_response.split())},
+        success=True,  # Minimal success
+        error=f"Degraded processing due to: {error_msg}",
+        tool_recommendations_generated=False,
+        reflection_applied=False,
+        context_updated=False,
+    )
+
+
 # Global app context
 app_context = EnhancedAppContext()
 
@@ -487,19 +908,81 @@ async def process_thought_with_dual_teams(
     Process a thought using the dual-team architecture with comprehensive error handling.
     """
     start_time = time.time()
+    error_handler = app_context.error_handler
 
     try:
-        # Ensure teams are initialized
-        if not app_context.primary_team or not app_context.reflection_team:
-            await app_context.initialize_teams()
+        # Check circuit breaker for team operations
+        if not error_handler.circuit_breakers["primary_team"].can_execute():
+            raise Exception("Primary team circuit breaker is open - too many recent failures")
+        
+        if not error_handler.circuit_breakers["context_operations"].can_execute():
+            raise Exception("Context operations circuit breaker is open - too many recent failures")
 
-        # Add thought to context for memory persistence
-        await app_context.add_thought(thought_data)
+        # Ensure teams are initialized with circuit breaker protection
+        try:
+            if not app_context.primary_team or not app_context.reflection_team:
+                await app_context.initialize_teams()
+                error_handler.circuit_breakers["primary_team"].record_success()
+        except Exception as e:
+            error_context = await error_handler.handle_error(
+                e, 
+                ErrorType.TEAM_INITIALIZATION, 
+                {
+                    "component": "primary_team",
+                    "thought_number": thought_data.thoughtNumber,
+                    "session_id": app_context.session_id
+                }
+            )
+            # Try graceful degradation with simplified processing
+            if error_context.retry_count < 2:
+                return await _process_with_minimal_teams(thought_data, start_time, str(e))
+            else:
+                raise
 
-        # Get relevant context
-        relevant_context = await app_context.get_context_for_thought(
-            thought_data.thought
-        )
+        # Update context for adaptive prompts with error protection
+        try:
+            app_context._update_thought_context(thought_data)
+        except Exception as e:
+            await error_handler.handle_error(
+                e, 
+                ErrorType.CONTEXT_ERROR, 
+                {"component": "context_operations", "thought_number": thought_data.thoughtNumber}
+            )
+            # Continue without context update if it fails
+
+        # Add thought to context for memory persistence with error protection
+        try:
+            await app_context.add_thought(thought_data)
+            error_handler.circuit_breakers["context_operations"].record_success()
+        except Exception as e:
+            await error_handler.handle_error(
+                e, 
+                ErrorType.CONTEXT_ERROR, 
+                {"component": "context_operations", "thought_number": thought_data.thoughtNumber}
+            )
+            # Continue without adding to context if it fails
+
+        # Get relevant context with timeout and error protection
+        relevant_context = {}
+        try:
+            relevant_context = await asyncio.wait_for(
+                app_context.get_context_for_thought(thought_data.thought),
+                timeout=10.0  # 10 second timeout
+            )
+        except asyncio.TimeoutError:
+            await error_handler.handle_error(
+                TimeoutError("Context retrieval timeout"), 
+                ErrorType.TIMEOUT_ERROR, 
+                {"component": "context_operations", "thought_number": thought_data.thoughtNumber}
+            )
+            # Continue with empty context if retrieval times out
+        except Exception as e:
+            await error_handler.handle_error(
+                e, 
+                ErrorType.CONTEXT_ERROR, 
+                {"component": "context_operations", "thought_number": thought_data.thoughtNumber}
+            )
+            # Continue with empty context if retrieval fails
 
         # Prepare enhanced input for primary team
         input_prompt = f"""Process Enhanced Thought #{thought_data.thoughtNumber}:
@@ -536,25 +1019,71 @@ async def process_thought_with_dual_teams(
 
         input_prompt += "\n\nPlease provide comprehensive analysis with tool recommendations and next-step guidance."
 
-        # Process with primary team
+        # Process with primary team with comprehensive error handling
         logger.info(
             f"Processing thought #{thought_data.thoughtNumber} with primary team..."
         )
-        if not app_context.primary_team:
-            raise ValueError("Primary team not initialized")
-        primary_response = await app_context.primary_team.arun(input_prompt)
+        
+        primary_content = None
+        try:
+            # Check circuit breaker before primary team operation
+            if not error_handler.circuit_breakers["primary_team"].can_execute():
+                raise Exception("Primary team circuit breaker is open")
+            
+            if not app_context.primary_team:
+                raise ValueError("Primary team not initialized")
+            
+            # Execute with timeout protection
+            primary_response = await asyncio.wait_for(
+                app_context.primary_team.arun(input_prompt),
+                timeout=60.0  # 60 second timeout for primary team
+            )
 
-        # Extract and validate primary response content
-        if not primary_response or not hasattr(primary_response, "content"):
-            raise ValueError("Primary team returned invalid response")
+            # Extract and validate primary response content
+            if not primary_response or not hasattr(primary_response, "content"):
+                raise ValueError("Primary team returned invalid response")
 
-        primary_content = primary_response.content
-        if not primary_content or len(primary_content.strip()) == 0:
-            raise ValueError("Primary team returned empty response")
+            primary_content = primary_response.content
+            if not primary_content or len(primary_content.strip()) == 0:
+                raise ValueError("Primary team returned empty response")
 
-        logger.info(
-            f"Primary team completed processing thought #{thought_data.thoughtNumber}"
-        )
+            # Record successful operation
+            error_handler.circuit_breakers["primary_team"].record_success()
+            logger.info(
+                f"Primary team completed processing thought #{thought_data.thoughtNumber}"
+            )
+
+        except asyncio.TimeoutError:
+            await error_handler.handle_error(
+                TimeoutError("Primary team processing timeout"), 
+                ErrorType.TIMEOUT_ERROR, 
+                {
+                    "component": "primary_team",
+                    "thought_number": thought_data.thoughtNumber,
+                    "session_id": app_context.session_id,
+                    "retry_count": 0
+                }
+            )
+            # Provide fallback response
+            primary_content = f"Analysis of: {thought_data.thought}\n\nProcessing timeout occurred. The thought has been acknowledged but requires manual review. Please consider breaking down complex thoughts into smaller components for better processing."
+            
+        except Exception as e:
+            error_context = await error_handler.handle_error(
+                e, 
+                ErrorType.TEAM_PROCESSING, 
+                {
+                    "component": "primary_team",
+                    "thought_number": thought_data.thoughtNumber,
+                    "session_id": app_context.session_id
+                }
+            )
+            
+            # Try graceful degradation
+            if error_context.severity in [ErrorSeverity.CRITICAL, ErrorSeverity.HIGH]:
+                # Provide minimal fallback response
+                primary_content = f"Analysis of: {thought_data.thought}\n\nProcessing encountered an error: {str(e)}\n\nFallback Response: The thought content has been received and basic acknowledgment provided. Please retry or simplify the request."
+            else:
+                raise
 
         # Process with reflection team if response is substantial
         reflection_content = None
@@ -583,22 +1112,57 @@ async def process_thought_with_dual_teams(
 Please provide constructive reflection with specific feedback and recommendations."""
 
             try:
-                if not app_context.reflection_team:
-                    raise ValueError("Reflection team not initialized")
-                reflection_response = await app_context.reflection_team.arun(
-                    reflection_input
-                )
-                if reflection_response and hasattr(reflection_response, "content"):
-                    reflection_content = reflection_response.content
-                    app_context.total_reflections += 1
-                    logger.info(
-                        f"Reflection completed for thought #{thought_data.thoughtNumber}"
+                # Check circuit breaker for reflection team
+                if not error_handler.circuit_breakers["reflection_team"].can_execute():
+                    logger.warning("Reflection team circuit breaker is open - skipping reflection")
+                    reflection_content = "Reflection skipped due to recent failures. Primary analysis stands as-is."
+                else:
+                    if not app_context.reflection_team:
+                        raise ValueError("Reflection team not initialized")
+                    
+                    # Execute with timeout protection
+                    reflection_response = await asyncio.wait_for(
+                        app_context.reflection_team.arun(reflection_input),
+                        timeout=45.0  # 45 second timeout for reflection team
                     )
+                    
+                    if reflection_response and hasattr(reflection_response, "content"):
+                        reflection_content = reflection_response.content
+                        app_context.total_reflections += 1
+                        error_handler.circuit_breakers["reflection_team"].record_success()
+                        logger.info(
+                            f"Reflection completed for thought #{thought_data.thoughtNumber}"
+                        )
+                    else:
+                        raise ValueError("Reflection team returned invalid response")
+                        
+            except asyncio.TimeoutError:
+                await error_handler.handle_error(
+                    TimeoutError("Reflection team processing timeout"), 
+                    ErrorType.TIMEOUT_ERROR, 
+                    {
+                        "component": "reflection_team",
+                        "thought_number": thought_data.thoughtNumber,
+                        "session_id": app_context.session_id
+                    }
+                )
+                reflection_content = "Reflection timeout occurred. Primary analysis is complete but lacks meta-cognitive feedback."
+                
             except Exception as e:
+                await error_handler.handle_error(
+                    e, 
+                    ErrorType.TEAM_PROCESSING, 
+                    {
+                        "component": "reflection_team",
+                        "thought_number": thought_data.thoughtNumber,
+                        "session_id": app_context.session_id
+                    }
+                )
                 logger.warning(
                     f"Reflection team failed for thought #{thought_data.thoughtNumber}: {e}"
                 )
-                reflection_content = f"Reflection unavailable due to error: {str(e)}"
+                # Graceful degradation - continue without reflection
+                reflection_content = None
 
         # Integrate responses
         integrated_response = primary_content
@@ -659,15 +1223,64 @@ Please provide constructive reflection with specific feedback and recommendation
 
     except Exception as e:
         execution_time = int((time.time() - start_time) * 1000)
+        
+        # Use enhanced error handling for main exceptions
+        error_context = await error_handler.handle_error(
+            e, 
+            ErrorType.UNKNOWN_ERROR, 
+            {
+                "component": "main_processing",
+                "thought_number": thought_data.thoughtNumber,
+                "session_id": app_context.session_id,
+                "execution_time_ms": execution_time,
+                "stack_trace": str(e.__traceback__)
+            }
+        )
+        
         logger.error(f"Error processing thought #{thought_data.thoughtNumber}: {e}")
+        
+        # Try graceful degradation one more time if error is recoverable
+        if error_context.severity in [ErrorSeverity.LOW, ErrorSeverity.MEDIUM] and error_context.retry_count < 1:
+            try:
+                return await _process_with_minimal_teams(thought_data, start_time, str(e))
+            except Exception as fallback_error:
+                logger.critical(f"Even fallback processing failed: {fallback_error}")
 
-        # Return error result
+        # Return comprehensive error result with recovery suggestions
+        error_summary = error_handler.get_error_summary()
+        recovery_suggestions = []
+        
+        if error_summary["circuit_breaker_states"]["primary_team"] == "open":
+            recovery_suggestions.append("Primary team circuit breaker is open - wait for recovery period")
+        if error_summary["recent_errors"] > 5:
+            recovery_suggestions.append("High error rate detected - consider system restart")
+        if "timeout" in str(e).lower():
+            recovery_suggestions.append("Timeouts detected - check network connectivity and system load")
+        
+        recovery_text = "\n\n**Recovery Suggestions**:\n" + "\n".join(f"- {s}" for s in recovery_suggestions) if recovery_suggestions else ""
+        
         return ProcessedThought(
             thought_data=thought_data,
             coordinator_response="",
             reflection_response=None,
-            integrated_response=f"Processing failed: {str(e)}",
-            next_step_guidance="Please try again or revise the thought.",
+            integrated_response=f"""## Processing Error
+
+**Error Details**: {str(e)}
+**Error Type**: {error_context.error_type.value}
+**Severity**: {error_context.severity.value}
+**Retry Count**: {error_context.retry_count}
+
+**Thought**: {thought_data.thought}
+
+**System Status**:
+- Recent Errors: {error_summary['recent_errors']}
+- Circuit Breakers: {error_summary['circuit_breaker_states']}
+- Recovery Success Rate: {error_summary['recovery_success_rate']:.2%}
+
+{recovery_text}
+
+**Next Steps**: Consider simplifying the request, checking system status, or retrying after a brief pause.""",
+            next_step_guidance="System error encountered. Review error details and consider recovery suggestions.",
             execution_time_ms=execution_time,
             success=False,
             error=str(e),
@@ -680,7 +1293,7 @@ Please provide constructive reflection with specific feedback and recommendation
 async def generate_sequence_review() -> ThoughtSequenceReview:
     """
     Generate comprehensive review of the thought sequence using SharedContext.
-    Implementation for the sequentialreview tool.
+    Implementation for the reflectivereview tool.
     """
     try:
         # Analyze thought patterns
@@ -795,11 +1408,11 @@ async def generate_sequence_review() -> ThoughtSequenceReview:
 
 
 # Initialize FastMCP server with enhanced tools
-mcp = FastMCP("enhanced_sequential_thinking")
+mcp = FastMCP("reflective_thinking_tools")
 
 
 @mcp.tool()
-async def sequentialthinking(
+async def reflectivethinking(
     thought: str,
     thoughtNumber: int,
     totalThoughts: int,
@@ -816,7 +1429,7 @@ async def sequentialthinking(
     keywords: Optional[List[str]] = None,
 ) -> str:
     """
-    Enhanced sequential thinking tool with dual-team architecture, tool recommendations, and memory persistence.
+    Enhanced reflective thinking tool with dual-team architecture, tool recommendations, and memory persistence.
 
     Processes thoughts using primary thinking team + reflection team for meta-analysis.
     Supports topic/subject alignment, branching, revision, and comprehensive context tracking.
@@ -872,7 +1485,7 @@ async def sequentialthinking(
 
 
 @mcp.tool()
-async def sequentialreview() -> str:
+async def reflectivereview() -> str:
     """
     Comprehensive review tool for analyzing thought sequences, branches, and patterns.
 

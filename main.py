@@ -34,18 +34,18 @@ os.environ["LLM_PROVIDER"] = "openrouter"
 def setup_logging() -> logging.Logger:
     """
     Set up application logging with both file and console handlers.
-    Logs will be stored in the user's home directory under .sequential_thinking/logs.
+    Logs will be stored in the user's home directory under .reflective_thinking/logs.
 
     Returns:
         Logger instance configured with both handlers.
     """
     # Create logs directory in user's home
     home_dir = Path.home()
-    log_dir = home_dir / ".sequential_thinking" / "logs"
+    log_dir = home_dir / ".reflective_thinking" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Create logger
-    logger = logging.getLogger("sequential_thinking")
+    logger = logging.getLogger("reflective_thinking")
     logger.setLevel(logging.DEBUG)
 
     # Log format
@@ -56,7 +56,7 @@ def setup_logging() -> logging.Logger:
 
     # File handler with rotation
     file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "sequential_thinking.log",
+        log_dir / "reflective_thinking.log",
         maxBytes=10 * 1024 * 1024,  # 10MB
         backupCount=5,
         encoding="utf-8",
@@ -81,8 +81,8 @@ logger = setup_logging()
 
 class ThoughtData(BaseModel):
     """
-    Represents the data structure for a single thought within the sequential
-    thinking process. Serves as the input schema for the 'sequentialthinking' tool.
+    Represents the data structure for a single thought within the reflective
+    thinking process. Serves as the input schema for the 'reflectivethinking' tool.
     """
 
     thought: str = Field(
@@ -331,9 +331,9 @@ def get_model_config() -> tuple[Type[Model], str, str]:
     return ModelClass, team_model_id, agent_model_id
 
 
-def create_sequential_thinking_team() -> Team:
+def create_reflective_thinking_team() -> Team:
     """
-    Creates and configures the Agno multi-agent team for sequential thinking,
+    Creates and configures the Agno multi-agent team for reflective thinking,
     using 'coordinate' mode. The Team object itself acts as the coordinator.
 
     Returns:
@@ -484,7 +484,7 @@ def create_sequential_thinking_team() -> Team:
             synthesizer,
         ],  # ONLY specialist agents
         model=team_model_instance,  # Model for the Team's coordination logic
-        description="You are the Coordinator of a specialist team processing sequential thoughts. Your role is to manage the flow, delegate tasks, and synthesize results.",
+        description="You are the Coordinator of a specialist team processing reflective thoughts. Your role is to manage the flow, delegate tasks, and synthesize results.",
         instructions=[
             "You are the Coordinator managing a team of specialists (Planner, Researcher, Analyzer, Critic, Synthesizer) in 'coordinate' mode.",
             "Your core responsibilities when receiving an input thought:",
@@ -559,7 +559,7 @@ async def app_lifespan() -> AsyncIterator[None]:
     global app_context
     logger.info("Initializing application resources (Coordinate Mode)...")
     try:
-        team = create_sequential_thinking_team()
+        team = create_reflective_thinking_team()
         app_context = AppContext(team=team)
         provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
         logger.info(
@@ -586,25 +586,25 @@ mcp = FastMCP()
 # --- MCP Handlers ---
 
 
-@mcp.prompt("sequential-thinking")
-def sequential_thinking_prompt(problem: str, context: str = ""):
+@mcp.prompt("reflective-thinking")
+def reflective_thinking_prompt(problem: str, context: str = ""):
     """
-    Starter prompt for sequential thinking that ENCOURAGES non-linear exploration
+    Starter prompt for reflective thinking that ENCOURAGES non-linear exploration
     using coordinate mode. Returns separate user and assistant messages.
     """
     min_thoughts = 5  # Set a reasonable minimum number of initial thoughts
 
-    user_prompt_text = f"""Initiate a comprehensive sequential thinking process for the following problem:
+    user_prompt_text = f"""Initiate a comprehensive reflective thinking process for the following problem:
 
 Problem: {problem}
 {f"Context: {context}" if context else ""}"""
 
-    assistant_guidelines = f"""Okay, let's start the sequential thinking process. Here are the guidelines and the process we'll follow using the 'coordinate' mode team:
+    assistant_guidelines = f"""Okay, let's start the reflective thinking process. Here are the guidelines and the process we'll follow using the 'coordinate' mode team:
 
 **Sequential Thinking Goals & Guidelines (Coordinate Mode):**
 
 1.  **Estimate Steps:** Analyze the problem complexity. Your initial `totalThoughts` estimate should be at least {min_thoughts}.
-2.  **First Thought:** Call the 'sequentialthinking' tool with `thoughtNumber: 1`, your estimated `totalThoughts` (at least {min_thoughts}), and `nextThoughtNeeded: True`. Structure your first thought as: "Plan a comprehensive analysis approach for: {problem}"
+2.  **First Thought:** Call the 'reflectivethinking' tool with `thoughtNumber: 1`, your estimated `totalThoughts` (at least {min_thoughts}), and `nextThoughtNeeded: True`. Structure your first thought as: "Plan a comprehensive analysis approach for: {problem}"
 3.  **Encouraged Revision:** Actively look for opportunities to revise previous thoughts if you identify flaws, oversights, or necessary refinements based on later analysis (especially from the Coordinator synthesizing Critic/Analyzer outputs). Use `isRevision: True` and `revisesThought: <thought_number>` when performing a revision. Robust thinking often involves self-correction. Look for 'RECOMMENDATION: Revise thought #X...' in the Coordinator's response.
 4.  **Encouraged Branching:** Explore alternative paths, perspectives, or solutions where appropriate. Use `branchFromThought: <thought_number>` and `branchId: <unique_branch_name>` to initiate branches. Exploring alternatives is key to thorough analysis. Consider suggestions for branching proposed by the Coordinator (e.g., 'SUGGESTION: Consider branching...').
 5.  **Extension:** If the analysis requires more steps than initially estimated, use `needsMoreThoughts: True` on the thought *before* you need the extension.
@@ -615,7 +615,7 @@ Problem: {problem}
 
 **Process:**
 
-*   The `sequentialthinking` tool will track your progress. The Agno team operates in 'coordinate' mode. The Coordinator agent receives your thought, delegates sub-tasks to specialists (like Analyzer, Critic), and synthesizes their outputs, potentially including recommendations for revision or branching.
+*   The `reflectivethinking` tool will track your progress. The Agno team operates in 'coordinate' mode. The Coordinator agent receives your thought, delegates sub-tasks to specialists (like Analyzer, Critic), and synthesizes their outputs, potentially including recommendations for revision or branching.
 *   Focus on insightful analysis, constructive critique (leading to potential revisions), and creative exploration (leading to potential branching).
 *   Actively reflect on the process. Linear thinking might be insufficient for complex problems.
 
@@ -623,7 +623,7 @@ Proceed with the first thought based on these guidelines."""
 
     return [
         {
-            "description": "Starter prompt for non-linear sequential thinking (coordinate mode), providing problem and guidelines separately.",
+            "description": "Starter prompt for non-linear reflective thinking (coordinate mode), providing problem and guidelines separately.",
             "messages": [
                 {"role": "user", "content": {"type": "text", "text": user_prompt_text}},
                 {
@@ -636,7 +636,7 @@ Proceed with the first thought based on these guidelines."""
 
 
 @mcp.tool()
-async def sequentialthinking(
+async def reflectivethinking(
     thought: str,
     thoughtNumber: int,
     totalThoughts: int,
@@ -712,7 +712,7 @@ async def sequentialthinking(
         # Let's try re-initialization if app_lifespan wasn't used or failed silently.
         logger.warning("Attempting to re-initialize team due to missing context...")
         try:
-            team = create_sequential_thinking_team()
+            team = create_reflective_thinking_team()
             app_context = AppContext(team=team)  # Re-create context
             logger.info("Successfully re-initialized team and context.")
         except Exception as init_err:
@@ -899,7 +899,7 @@ def run():
     if not app_context:  # Check if context already exists (e.g., from lifespan manager)
         logger.info("Initializing application resources directly (Coordinate Mode)...")
         try:
-            team = create_sequential_thinking_team()
+            team = create_reflective_thinking_team()
             app_context = AppContext(team=team)
             logger.info(
                 f"Agno team initialized directly in coordinate mode using provider: {selected_provider}."

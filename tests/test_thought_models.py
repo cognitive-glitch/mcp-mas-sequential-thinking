@@ -13,7 +13,7 @@ from src.models.thought_models import (
     ThoughtSequenceReview,
     ProcessedThought,
 )
-from conftest import create_test_thought_data, create_test_tool_recommendation
+from .conftest import create_test_thought_data, create_test_tool_recommendation
 
 
 class TestThoughtData:

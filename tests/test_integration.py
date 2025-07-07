@@ -1,5 +1,5 @@
 """
-Integration tests for the complete enhanced sequential thinking system.
+Integration tests for the complete enhanced reflective thinking system.
 """
 
 import pytest
@@ -8,21 +8,21 @@ from unittest.mock import patch
 from mcp.server.fastmcp import FastMCP
 
 from main_refactored import (
-    sequentialthinking,
-    sequentialreview,
+    reflectivethinking,
+    reflectivereview,
     EnhancedAppContext,
     mcp,
 )
 
 
 class TestMCPToolsIntegration:
-    """Test the MCP tools (sequentialthinking and sequentialreview)."""
+    """Test the MCP tools (reflectivethinking and reflectivereview)."""
 
     @pytest.mark.asyncio
-    async def test_sequentialthinking_tool_basic(self, mock_app_context):
-        """Test basic sequentialthinking tool functionality."""
+    async def test_reflectivethinking_tool_basic(self, mock_app_context):
+        """Test basic reflectivethinking tool functionality."""
         with patch("main_refactored.app_context", mock_app_context):
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Analyze the system architecture for scalability issues",
                 thoughtNumber=1,
                 totalThoughts=3,
@@ -38,11 +38,11 @@ class TestMCPToolsIntegration:
         assert "Primary Team Analysis" in result or "analysis" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_sequentialthinking_with_revision(self, mock_app_context):
-        """Test sequentialthinking tool with revision."""
+    async def test_reflectivethinking_with_revision(self, mock_app_context):
+        """Test reflectivethinking tool with revision."""
         with patch("main_refactored.app_context", mock_app_context):
             # First, process an initial thought
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="Initial system analysis",
                 thoughtNumber=1,
                 totalThoughts=3,
@@ -51,7 +51,7 @@ class TestMCPToolsIntegration:
             )
 
             # Then process a revision
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Revised system analysis with better methodology",
                 thoughtNumber=2,
                 totalThoughts=3,
@@ -65,11 +65,11 @@ class TestMCPToolsIntegration:
         assert "revision" in result.lower() or "revise" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_sequentialthinking_with_branching(self, mock_app_context):
-        """Test sequentialthinking tool with branching."""
+    async def test_reflectivethinking_with_branching(self, mock_app_context):
+        """Test reflectivethinking tool with branching."""
         with patch("main_refactored.app_context", mock_app_context):
             # Process initial thought
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="Main approach analysis",
                 thoughtNumber=1,
                 totalThoughts=3,
@@ -77,7 +77,7 @@ class TestMCPToolsIntegration:
             )
 
             # Process branch
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Alternative approach via different methodology",
                 thoughtNumber=2,
                 totalThoughts=3,
@@ -90,11 +90,11 @@ class TestMCPToolsIntegration:
         assert "branch" in result.lower() or "alternative" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_sequentialthinking_validation_errors(self, mock_app_context):
-        """Test sequentialthinking tool validation error handling."""
+    async def test_reflectivethinking_validation_errors(self, mock_app_context):
+        """Test reflectivethinking tool validation error handling."""
         with patch("main_refactored.app_context", mock_app_context):
             # Test with invalid thoughtNumber
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Test thought",
                 thoughtNumber=0,  # Invalid - should be >= 1
                 totalThoughts=3,
@@ -104,11 +104,11 @@ class TestMCPToolsIntegration:
         assert "validation failed" in result.lower() or "error" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_sequentialreview_tool(self, mock_app_context):
-        """Test sequentialreview tool functionality."""
+    async def test_reflectivereview_tool(self, mock_app_context):
+        """Test reflectivereview tool functionality."""
         with patch("main_refactored.app_context", mock_app_context):
             # Add some thoughts first
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="First analysis step",
                 thoughtNumber=1,
                 totalThoughts=3,
@@ -116,7 +116,7 @@ class TestMCPToolsIntegration:
                 topic="Analysis Project",
             )
 
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="Second analysis step",
                 thoughtNumber=2,
                 totalThoughts=3,
@@ -125,7 +125,7 @@ class TestMCPToolsIntegration:
             )
 
             # Generate review
-            result = await sequentialreview()
+            result = await reflectivereview()
 
         assert isinstance(result, str)
         assert "Sequential Thinking Review" in result
@@ -133,8 +133,8 @@ class TestMCPToolsIntegration:
         assert "Recommendations" in result
 
     @pytest.mark.asyncio
-    async def test_sequentialreview_error_handling(self):
-        """Test sequentialreview error handling."""
+    async def test_reflectivereview_error_handling(self):
+        """Test reflectivereview error handling."""
         # Create broken context
         broken_context = EnhancedAppContext()
         # broken_context.shared_context = None
@@ -142,16 +142,16 @@ class TestMCPToolsIntegration:
         setattr(broken_context, "shared_context", None)
 
         with patch("main_refactored.app_context", broken_context):
-            result = await sequentialreview()
+            result = await reflectivereview()
 
         assert "failed" in result.lower() or "error" in result.lower()
 
     @pytest.mark.asyncio
     async def test_domain_parsing(self, mock_app_context):
-        """Test domain parsing in sequentialthinking tool."""
+        """Test domain parsing in reflectivethinking tool."""
         with patch("main_refactored.app_context", mock_app_context):
             # Test valid domain
-            result1 = await sequentialthinking(
+            result1 = await reflectivethinking(
                 thought="Technical analysis",
                 thoughtNumber=1,
                 totalThoughts=2,
@@ -160,7 +160,7 @@ class TestMCPToolsIntegration:
             )
 
             # Test invalid domain (should default to general)
-            result2 = await sequentialthinking(
+            result2 = await reflectivethinking(
                 thought="Invalid domain analysis",
                 thoughtNumber=1,
                 totalThoughts=2,
@@ -217,7 +217,7 @@ class TestEndToEndWorkflows:
 
             results = []
             for thought_params in thoughts:
-                result = await sequentialthinking(**thought_params)
+                result = await reflectivethinking(**thought_params)
                 results.append(result)
 
                 # Brief pause to simulate realistic timing
@@ -229,7 +229,7 @@ class TestEndToEndWorkflows:
             )
 
             # Generate final review
-            review = await sequentialreview()
+            review = await reflectivereview()
             assert "Sequential Thinking Review" in review
 
     @pytest.mark.asyncio
@@ -237,7 +237,7 @@ class TestEndToEndWorkflows:
         """Test a workflow with branching and revision."""
         with patch("main_refactored.app_context", mock_app_context):
             # Initial analysis
-            result1 = await sequentialthinking(
+            result1 = await reflectivethinking(
                 thought="Analyze current system performance",
                 thoughtNumber=1,
                 totalThoughts=4,
@@ -246,7 +246,7 @@ class TestEndToEndWorkflows:
             )
 
             # Continuation
-            result2 = await sequentialthinking(
+            result2 = await reflectivethinking(
                 thought="Identify primary bottlenecks",
                 thoughtNumber=2,
                 totalThoughts=4,
@@ -255,7 +255,7 @@ class TestEndToEndWorkflows:
             )
 
             # Branch for alternative approach
-            result3 = await sequentialthinking(
+            result3 = await reflectivethinking(
                 thought="Explore caching solution approach",
                 thoughtNumber=3,
                 totalThoughts=4,
@@ -266,7 +266,7 @@ class TestEndToEndWorkflows:
             )
 
             # Revision of original analysis
-            result4 = await sequentialthinking(
+            result4 = await reflectivethinking(
                 thought="Revised performance analysis with additional metrics",
                 thoughtNumber=4,
                 totalThoughts=4,
@@ -283,7 +283,7 @@ class TestEndToEndWorkflows:
             )
 
             # Generate review to see branch analysis
-            review = await sequentialreview()
+            review = await reflectivereview()
             assert "Sequential Thinking Review" in review
 
     @pytest.mark.asyncio
@@ -294,7 +294,7 @@ class TestEndToEndWorkflows:
             results = []
 
             for i, domain in enumerate(domains, 1):
-                result = await sequentialthinking(
+                result = await reflectivethinking(
                     thought=f"Analyze from {domain} perspective",
                     thoughtNumber=i,
                     totalThoughts=len(domains),
@@ -308,7 +308,7 @@ class TestEndToEndWorkflows:
             assert all(isinstance(result, str) for result in results)
 
             # Review should show domain diversity
-            review = await sequentialreview()
+            review = await reflectivereview()
             assert "Sequential Thinking Review" in review
 
     @pytest.mark.asyncio
@@ -316,7 +316,7 @@ class TestEndToEndWorkflows:
         """Test error recovery in workflows."""
         with patch("main_refactored.app_context", mock_app_context):
             # Normal thought
-            result1 = await sequentialthinking(
+            result1 = await reflectivethinking(
                 thought="Normal analysis",
                 thoughtNumber=1,
                 totalThoughts=3,
@@ -327,7 +327,7 @@ class TestEndToEndWorkflows:
             original_primary_team = mock_app_context.primary_team
             mock_app_context.primary_team = None
 
-            result2 = await sequentialthinking(
+            result2 = await reflectivethinking(
                 thought="This should handle error gracefully",
                 thoughtNumber=2,
                 totalThoughts=3,
@@ -338,7 +338,7 @@ class TestEndToEndWorkflows:
             mock_app_context.primary_team = original_primary_team
 
             # Continue normally
-            result3 = await sequentialthinking(
+            result3 = await reflectivethinking(
                 thought="Recovery analysis",
                 thoughtNumber=3,
                 totalThoughts=3,
@@ -361,7 +361,7 @@ class TestConcurrencyAndPerformance:
             # Create multiple concurrent requests
             tasks = []
             for i in range(5):
-                task = sequentialthinking(
+                task = reflectivethinking(
                     thought=f"Concurrent analysis {i + 1}",
                     thoughtNumber=i + 1,
                     totalThoughts=5,
@@ -389,7 +389,7 @@ class TestConcurrencyAndPerformance:
             # Measure single thought processing time
             start_time = time.time()
 
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Performance test analysis",
                 thoughtNumber=1,
                 totalThoughts=1,
@@ -407,7 +407,7 @@ class TestConcurrencyAndPerformance:
             start_time = time.time()
 
             for i in range(3):
-                await sequentialthinking(
+                await reflectivethinking(
                     thought=f"Throughput test {i + 1}",
                     thoughtNumber=i + 1,
                     totalThoughts=3,
@@ -428,7 +428,7 @@ class TestConcurrencyAndPerformance:
 
             # Process a series of thoughts
             for i in range(10):
-                await sequentialthinking(
+                await reflectivethinking(
                     thought=f"Memory test thought {i + 1}",
                     thoughtNumber=i + 1,
                     totalThoughts=10,
@@ -457,7 +457,7 @@ class TestSystemIntegration:
 
             for provider in providers:
                 with patch.dict("os.environ", {"LLM_PROVIDER": provider}):
-                    result = await sequentialthinking(
+                    result = await reflectivethinking(
                         thought=f"Test with {provider} provider",
                         thoughtNumber=1,
                         totalThoughts=1,
@@ -475,7 +475,7 @@ class TestSystemIntegration:
             session_id = mock_app_context.session_id
 
             # Process thoughts with context building
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="Establish context baseline",
                 thoughtNumber=1,
                 totalThoughts=2,
@@ -485,7 +485,7 @@ class TestSystemIntegration:
             )
 
             # Second thought should have access to context
-            result = await sequentialthinking(
+            result = await reflectivethinking(
                 thought="Build upon established context",
                 thoughtNumber=2,
                 totalThoughts=2,
@@ -518,14 +518,14 @@ class TestSystemIntegration:
             start_time = asyncio.get_event_loop().time()
 
             # Chain of async operations
-            await sequentialthinking(
+            await reflectivethinking(
                 thought="Async lifecycle test",
                 thoughtNumber=1,
                 totalThoughts=1,
                 nextThoughtNeeded=False,
             )
 
-            review = await sequentialreview()
+            review = await reflectivereview()
 
             end_time = asyncio.get_event_loop().time()
 
@@ -542,13 +542,13 @@ class TestEdgeCases:
         """Test handling of edge case inputs."""
         with patch("main_refactored.app_context", mock_app_context):
             # Very short thought
-            result1 = await sequentialthinking(
+            result1 = await reflectivethinking(
                 thought="x", thoughtNumber=1, totalThoughts=1, nextThoughtNeeded=False
             )
 
             # Very long thought (truncated in practice)
             long_thought = "x" * 10000
-            result2 = await sequentialthinking(
+            result2 = await reflectivethinking(
                 thought=long_thought,
                 thoughtNumber=1,
                 totalThoughts=1,
@@ -564,7 +564,7 @@ class TestEdgeCases:
         """Test boundary conditions for thought numbers."""
         with patch("main_refactored.app_context", mock_app_context):
             # Minimum valid thought number
-            result1 = await sequentialthinking(
+            result1 = await reflectivethinking(
                 thought="Minimum thought number",
                 thoughtNumber=1,
                 totalThoughts=1,
@@ -572,7 +572,7 @@ class TestEdgeCases:
             )
 
             # Large thought numbers
-            result2 = await sequentialthinking(
+            result2 = await reflectivethinking(
                 thought="Large thought number",
                 thoughtNumber=100,
                 totalThoughts=100,
@@ -603,5 +603,5 @@ class TestEdgeCases:
                     **case,
                 }
 
-                result = await sequentialthinking(**params)
+                result = await reflectivethinking(**params)
                 assert isinstance(result, str)  # Should handle gracefully
