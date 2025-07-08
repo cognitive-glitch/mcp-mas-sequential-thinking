@@ -91,7 +91,8 @@ class EnhancedErrorHandler:
             ErrorType.VALIDATION,
             ErrorType.VALIDATION_ERROR,
         ):
-            return "Input validation failed. Please check the format and try again."
+            # Include specific validation error details for debugging
+            return f"Input validation failed: {error_context.message}. Please check the format and try again."
 
         elif error_context.error_type == ErrorType.TEAM_PROCESSING:
             breaker = self.circuit_breakers.get("team_processing")

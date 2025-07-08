@@ -149,17 +149,14 @@ class TestMCPToolsCore:
     def mock_review_result(self):
         """Mock review result for testing."""
         review = Mock()
-        review.total_thoughts = 5
-        review.total_branches = 2
-        review.overall_quality = 0.85
-        review.topic_alignment_score = 0.90
-        review.key_insights = ["Key insight 1", "Key insight 2", "Key insight 3"]
-        review.patterns_identified = ["Pattern A", "Pattern B"]
-        review.tool_effectiveness = {"thinking_tools": 0.9, "analysis_tools": 0.8}
-        review.branch_analyses = []
-        review.next_steps = ["Next step 1", "Next step 2"]
-        review.areas_for_improvement = ["Improvement area 1"]
-        review.review_confidence = 0.88
+        # Use correct ThoughtSequenceReview model attributes
+        review.totalThoughts = 5
+        review.branches = ["branch-1", "branch-2"]  # List of branch IDs
+        review.overallCoherence = 0.85
+        review.keyInsights = ["Key insight 1", "Key insight 2", "Key insight 3"]
+        review.toolEffectiveness = {"thinking_tools": 0.9, "analysis_tools": 0.8}
+        review.recommendedNextSteps = ["Next step 1", "Next step 2"]
+        review.areasForImprovement = ["Improvement area 1"]
         return review
 
     @pytest.mark.asyncio
@@ -306,16 +303,13 @@ class TestMCPToolsCore:
             # Verify review content
             assert "Thought Sequence Review" in result
             assert "**Total Thoughts**: 5" in result
-            assert "**Total Branches**: 2" in result
+            assert "**Total Branches**: 2" in result  # len(branches) = 2
             assert "**Overall Quality**: 0.85" in result
-            assert "**Topic Alignment**: 0.90" in result
             assert "Key insight 1" in result
             assert "Key insight 2" in result
-            assert "Pattern A" in result
             assert "thinking_tools: 0.90" in result
             assert "Next step 1" in result
             assert "Improvement area 1" in result
-            assert "**Review Confidence**: 0.88" in result
 
     @pytest.mark.asyncio
     async def test_reflectivereview_error_handling(self):

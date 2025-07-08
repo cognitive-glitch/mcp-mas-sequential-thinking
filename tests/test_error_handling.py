@@ -303,7 +303,7 @@ class TestEnhancedErrorHandler:
 
         assert (
             recovery_msg
-            == "Input validation failed. Please check the format and try again."
+            == "Input validation failed: Validation failed for test_field: test reason. Please check the format and try again."
         )
         assert len(error_handler.error_history) == 1
 

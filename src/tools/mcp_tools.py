@@ -18,6 +18,7 @@ from src.models.thought_models import (
     DomainType,
 )
 from exceptions import ValidationError, ErrorType
+from pydantic import ValidationError as PydanticValidationError
 
 # MCP instance will be injected at runtime
 mcp = None
@@ -111,15 +112,18 @@ async def process_thought_with_dual_teams(thought_data: ThoughtData, context) ->
     return await processor.process_thought(thought_data)
 
 
-async def generate_sequence_review(
+async def _generate_sequence_review_wrapper(
     context, branch_id: Optional[str] = None, min_quality_threshold: float = 0.0
 ) -> Any:
     """Generate a comprehensive review of thought sequences."""
     # Import here to avoid circular imports
-
     from handlers.thought_processor import generate_sequence_review
 
     return await generate_sequence_review(context, branch_id, min_quality_threshold)
+
+
+# Backward compatibility alias for tests
+generate_sequence_review = _generate_sequence_review_wrapper
 
 
 # =============================================================================
@@ -293,6 +297,17 @@ async def reflectivethinking(
         logger.error(f"Validation error: {e}")
         return f"Validation Error: {error_msg}\n\nDetails: {str(e)}"
 
+    except PydanticValidationError as e:
+        error_msg = (
+            app_context.error_handler.handle_error(
+                e, ErrorType.VALIDATION_ERROR, thought_number
+            )
+            if app_context and app_context.error_handler
+            else str(e)
+        )
+        logger.error(f"Pydantic validation error: {e}")
+        return f"Validation Error: {error_msg}\n\nDetails: {str(e)}"
+
     except Exception as e:
         error_msg = (
             app_context.error_handler.handle_error(
@@ -316,49 +331,38 @@ async def reflectivereview() -> str:
         # Format review for output
         output = [
             "# Thought Sequence Review",
-            f"**Total Thoughts**: {review.total_thoughts}",
-            f"**Total Branches**: {review.total_branches}",
-            f"**Overall Quality**: {review.overall_quality:.2f}",
-            f"**Topic Alignment**: {review.topic_alignment_score:.2f}",
+            f"**Total Thoughts**: {review.totalThoughts}",
+            f"**Total Branches**: {len(review.branches)}",
+            f"**Overall Quality**: {review.overallCoherence:.2f}",
             "",
-            "## Key Insights",
         ]
 
-        for i, insight in enumerate(review.key_insights, 1):
+        # Add branch information if branches exist
+        if review.branches:
+            output.extend(["## Branches"])
+            for branch in review.branches:
+                output.append(f"- {branch}")
+            output.append("")
+
+        output.append("## Key Insights")
+
+        for i, insight in enumerate(review.keyInsights, 1):
             output.append(f"{i}. {insight}")
 
-        if review.patterns_identified:
-            output.extend(["", "## Patterns Identified"])
-            for pattern in review.patterns_identified:
-                output.append(f"- {pattern}")
-
-        if review.tool_effectiveness:
+        if review.toolEffectiveness:
             output.extend(["", "## Tool Effectiveness"])
-            for tool, effectiveness in review.tool_effectiveness.items():
+            for tool, effectiveness in review.toolEffectiveness.items():
                 output.append(f"- {tool}: {effectiveness:.2f}")
 
-        if review.branch_analyses:
-            output.extend(["", "## Branch Analysis"])
-            for branch in review.branch_analyses:
-                output.append(
-                    f"\n### Branch: {branch.branch_id}\n"
-                    f"- Quality: {branch.branch_quality:.2f}\n"
-                    f"- Thoughts: {branch.thought_count}\n"
-                    f"- Status: {branch.completion_status}\n"
-                    f"- Recommendation: {branch.recommendation}"
-                )
-
-        if review.next_steps:
+        if review.recommendedNextSteps:
             output.extend(["", "## Recommended Next Steps"])
-            for step in review.next_steps:
+            for step in review.recommendedNextSteps:
                 output.append(f"- {step}")
 
-        if review.areas_for_improvement:
+        if review.areasForImprovement:
             output.extend(["", "## Areas for Improvement"])
-            for area in review.areas_for_improvement:
+            for area in review.areasForImprovement:
                 output.append(f"- {area}")
-
-        output.append(f"\n**Review Confidence**: {review.review_confidence:.2f}")
 
         return "\n".join(output)
 

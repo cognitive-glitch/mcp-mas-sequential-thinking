@@ -61,6 +61,7 @@ class AppContextProtocol(Protocol):
     reflection_team: Optional[Any]
     shared_context: Any
     error_handler: Any
+    thought_history: List[Any]
 
     @abstractmethod
     async def initialize_teams(self) -> None:

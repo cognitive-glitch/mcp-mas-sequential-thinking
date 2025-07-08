@@ -357,13 +357,9 @@ async def generate_sequence_review(
     try:
         # Get thoughts for review
         if branch_id:
-            thoughts = [
-                t
-                for t in context.shared_context.thought_chain
-                if t.branchId == branch_id
-            ]
+            thoughts = [t for t in context.thought_history if t.branchId == branch_id]
         else:
-            thoughts = list(context.shared_context.thought_chain)
+            thoughts = list(context.thought_history)
 
         # Filter by quality if threshold set
         if min_quality_threshold > 0:

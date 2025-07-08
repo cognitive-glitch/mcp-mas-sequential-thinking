@@ -20,13 +20,17 @@ logger = logging.getLogger(__name__)
 class TeamExecutionError(Exception):
     """Raised when team execution fails."""
 
-    pass
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
 
 
 class AgentExecutionError(Exception):
     """Raised when an individual agent fails."""
 
-    pass
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
 
 
 class MockResponse:
@@ -156,21 +160,26 @@ class AsyncTeam:
             # Create proper Message object for Agno
             messages = [Message(role="user", content=prompt)]
 
-            # Use timeout for individual agent
-            async with asyncio.timeout(self.timeout):
-                # Check if agent has a model
-                if not agent.model:
-                    raise AgentExecutionError(f"Agent {agent.name} has no model")
+            # Check if agent has a model
+            if not agent.model:
+                raise AgentExecutionError(f"Agent {agent.name} has no model")
 
+            # Define async function for timeout wrapper
+            async def run_model():
+                # Type guard: we already checked agent.model is not None
+                assert agent.model is not None
                 # Try different async methods based on what's available
                 if hasattr(agent.model, "aresponse"):
-                    response = await agent.model.aresponse(messages)
+                    return await agent.model.aresponse(messages)
                 elif hasattr(agent.model, "ainvoke"):
-                    response = await agent.model.ainvoke(messages)
+                    return await agent.model.ainvoke(messages)
                 else:
                     raise AgentExecutionError(
                         f"Agent {agent.name} model has no async method"
                     )
+
+            # Use timeout for individual agent (Python 3.10 compatible)
+            response = await asyncio.wait_for(run_model(), timeout=self.timeout)
 
             # Extract content from response
             if hasattr(response, "content"):

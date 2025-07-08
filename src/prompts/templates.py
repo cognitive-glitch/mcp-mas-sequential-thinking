@@ -155,15 +155,18 @@ def get_complex_problem_prompt(
     constraints_text = "\n".join([f"- {c}" for c in (constraints or [])])
     objectives_text = "\n".join([f"- {o}" for o in (objectives or [])])
 
+    # Build constraint section
+    constraints_section = f"Constraints:\n{constraints_text}\n" if constraints else ""
+    objectives_section = f"Objectives:\n{objectives_text}\n" if objectives else ""
+
     prompt = f"""
 Complex Problem Analysis
 
 Problem Statement:
 {problem_statement}
 
-{f"Constraints:\n{constraints_text}" if constraints else ""}
-
-{f"Objectives:\n{objectives_text}" if objectives else ""}
+{constraints_section}
+{objectives_section}
 
 Approach this systematically:
 
